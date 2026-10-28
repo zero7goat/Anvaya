@@ -4,6 +4,7 @@ import { BOUTIQUE_CONFIG } from "../config";
 import { CollectionType } from "../types";
 import { productService } from "../services/productService";
 import { formatINR } from "../utils/productDisplay";
+import { COLLECTION_STYLES } from "../utils/productRules";
 
 interface FooterProps {
   onSelectCategory?: (category: string) => void;
@@ -11,11 +12,8 @@ interface FooterProps {
   onNavigateCollectionStyle?: (collection: CollectionType, style: string) => void;
 }
 
-// Styles offered by each collection, in display order
-export const COLLECTION_STYLES: Record<CollectionType, string[]> = {
-  alankritha: ["Straight Fit", "A-Line", "Anarkali"],
-  ayanaa: ["Banarasi Silk", "Organza", "Katan Silk"],
-};
+// Styles offered by each collection, in display order (shared with the admin form)
+export { COLLECTION_STYLES };
 
 /**
  * Site footer: a solid brand-coloured band with link columns (shop, styles, customer

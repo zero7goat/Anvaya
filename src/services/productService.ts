@@ -394,6 +394,7 @@ class ProductService {
   private products: Product[];
 
   private catalogueLoad: Promise<CatalogueSource> | null = null;
+  private reloadRequest = 0;
 
   constructor() {
     this.products = [...INITIAL_SAMPLE_PRODUCTS];
@@ -414,6 +415,34 @@ class ProductService {
   public loadCatalogue(): Promise<CatalogueSource> {
     this.catalogueLoad ??= this.loadRemoteCatalogue();
     return this.catalogueLoad;
+  }
+
+  /**
+   * Reads the catalogue from Supabase again after an admin change, so the dashboard
+   * and storefront show what is saved (including hidden products for a signed-in
+   * admin). Unlike the startup load, an empty result is kept: the admin may have
+   * deleted everything. Returns false if it could not be read.
+   */
+  public async reloadCatalogue(): Promise<boolean> {
+    if (!this.usesRemoteCatalogue()) return false;
+    const request = ++this.reloadRequest;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), CATALOGUE_TIMEOUT_MS);
+    try {
+      const { fetchSupabaseCatalogue } = await import("./supabaseCatalogue");
+      const products = await fetchSupabaseCatalogue(controller.signal);
+      if (controller.signal.aborted) return false;
+      // A newer reload started meanwhile: let it decide, so an older list never wins
+      if (request !== this.reloadRequest) return true;
+      this.products = products;
+      this.catalogueLoad = Promise.resolve("supabase");
+      return true;
+    } catch (error) {
+      console.warn("[catalogue] Could not reload products from Supabase.", error);
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private async loadRemoteCatalogue(): Promise<CatalogueSource> {

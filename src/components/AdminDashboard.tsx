@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { 
   Package, ShoppingBag, AlertTriangle, CheckCircle2, Clock, 
   Search, Plus, Edit2, Trash2, Eye, EyeOff, LogOut, ArrowLeft, 
@@ -9,6 +9,10 @@ import { Product, Order, CollectionType } from "../types";
 import { productService } from "../services/productService";
 import { orderService } from "../services/orderService";
 import { authService, AdminAuthState } from "../services/authService";
+import { catalogueAdmin, SaveResult } from "../services/catalogueAdmin";
+import {
+  COLLECTION_STYLES, MAX_DESCRIPTION_LENGTH, MAX_NAME_LENGTH, MAX_STOCK, checkProductForm, newProductId,
+} from "../utils/productRules";
 import { BOUTIQUE_CONFIG } from "../config";
 import ProductImage from "./ProductImage";
 import { FloralSprig } from "./decor/Motifs";
@@ -72,12 +76,22 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
     isFeatured: false,
     isNewArrival: true,
     status: "enabled" as "enabled" | "disabled",
-    sizeStock: { "S": 4, "M": 6, "L": 6, "XL": 2, "XXL": 0 } as Record<string, number>
+    sizeStock: { "S": 4, "M": 6, "L": 6, "XL": 2, "XXL": 0 } as Record<string, number | string>
   });
   const [formError, setFormError] = useState("");
+  // Id for the product being added, made once per form so a retried save can't add it twice
+  const [newFormProductId, setNewFormProductId] = useState("");
+  const [savingProduct, setSavingProduct] = useState(false);
+  const savingProductRef = useRef(false);
 
   // Delete Confirmation Dialog state
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [deleteError, setDeleteError] = useState("");
+
+  // Saves in progress (per product action), and the latest saved / failed message
+  const [pending, setPending] = useState<Record<string, boolean>>({});
+  const pendingRef = useRef(new Set<string>());
+  const [notice, setNotice] = useState<{ kind: "success" | "warning" | "error"; text: string } | null>(null);
 
   // Order Details Modal / View
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -94,6 +108,56 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
   useEffect(() => {
     refreshData();
   }, []);
+
+  // Once signed in, read the catalogue again as the admin, so hidden products are listed too
+  useEffect(() => {
+    if (authState.status !== "admin") return;
+    let active = true;
+    productService.reloadCatalogue().then(() => {
+      if (active) refreshData();
+    });
+    return () => {
+      active = false;
+    };
+  }, [authState.status]);
+
+  // Success messages fade after a few seconds; errors stay until dismissed
+  useEffect(() => {
+    if (notice?.kind !== "success") return;
+    const timer = setTimeout(() => setNotice(null), 5000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  // After a saved change: read the catalogue again so the dashboard and the shop show what was saved
+  const showSaved = async (text: string) => {
+    const reloaded = await productService.reloadCatalogue();
+    refreshData();
+    setNotice(
+      reloaded
+        ? { kind: "success", text }
+        : { kind: "warning", text: `${text} The list couldn't be refreshed; reload the page to see the latest.` }
+    );
+  };
+
+  // Runs one save for a product action, ignoring repeat clicks while it is in progress
+  const runAction = async (key: string, action: () => Promise<SaveResult>, successText: string): Promise<boolean> => {
+    if (pendingRef.current.has(key)) return false;
+    pendingRef.current.add(key);
+    setPending((prev) => ({ ...prev, [key]: true }));
+    try {
+      const result = await action();
+      if (result.ok) await showSaved(successText);
+      else setNotice({ kind: "error", text: result.error });
+      return result.ok;
+    } finally {
+      pendingRef.current.delete(key);
+      setPending((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
+  };
 
   // Compute business analytics overview numbers
   const metrics = useMemo(() => {
@@ -206,6 +270,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
       status: "enabled",
       sizeStock: { "S": 4, "M": 6, "L": 4, "XL": 2, "XXL": 0 }
     });
+    setNewFormProductId(newProductId());
     setFormError("");
     setIsProductModalOpen(true);
   };
@@ -231,82 +296,75 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
     setIsProductModalOpen(true);
   };
 
-  // Save product (Create or Update)
-  const handleSaveProduct = (e: React.FormEvent) => {
+  // Save product (Create or Update) to Supabase. On failure the form stays open with what was typed.
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim()) {
-      setFormError("Product title is required.");
-      return;
-    }
-    const numPrice = parseFloat(formData.price);
-    if (isNaN(numPrice) || numPrice <= 0) {
-      setFormError("Please enter a valid retail price.");
-      return;
-    }
-    const numSalePrice = formData.salePrice ? parseFloat(formData.salePrice) : undefined;
-    if (numSalePrice !== undefined && numSalePrice >= numPrice) {
-      setFormError("Promotional sale price must be lower than the retail price.");
+    if (savingProductRef.current) return;
+    const checked = checkProductForm(formData);
+    if (!checked.ok) {
+      setFormError(checked.error);
       return;
     }
 
-    // Collection correlates to category
-    const targetCollection: CollectionType = formData.category === "Sarees" ? "ayanaa" : "alankritha";
-
-    // Kurtas are stocked in S to XXL, sarees as Free Size
-    const cleanStock: Record<string, number> = {};
-    getSizeOptionsFor(formData.category).forEach(sz => {
-      cleanStock[sz] = Math.max(0, Number(formData.sizeStock[sz]) || 0);
-    });
-
-    if (editingProduct) {
-      productService.updateProduct(editingProduct.id, {
-        name: formData.name.trim(),
-        description: formData.description.trim(),
-        collection: targetCollection,
-        category: formData.category,
-        subcategory: formData.subcategory,
-        price: numPrice,
-        salePrice: numSalePrice,
-        image: formData.image.trim(),
-        isFeatured: formData.isFeatured,
-        isNewArrival: formData.isNewArrival,
-        status: formData.status,
-        sizeStock: cleanStock
-      });
-    } else {
-      productService.createProduct({
-        name: formData.name.trim(),
-        description: formData.description.trim(),
-        collection: targetCollection,
-        category: formData.category,
-        subcategory: formData.subcategory,
-        price: numPrice,
-        salePrice: numSalePrice,
-        image: formData.image.trim(),
-        isFeatured: formData.isFeatured,
-        isNewArrival: formData.isNewArrival,
-        status: formData.status,
-        sizeStock: cleanStock
-      });
+    savingProductRef.current = true;
+    setSavingProduct(true);
+    setFormError("");
+    try {
+      const draft = checked.value;
+      const result = editingProduct
+        ? await catalogueAdmin.updateProduct(editingProduct.id, draft)
+        : await catalogueAdmin.createProduct(newFormProductId, draft);
+      if (!result.ok) {
+        setFormError(result.error);
+        return;
+      }
+      await showSaved(editingProduct ? `Saved “${draft.name}”.` : `Added “${draft.name}”.`);
+      setIsProductModalOpen(false);
+    } finally {
+      savingProductRef.current = false;
+      setSavingProduct(false);
     }
+  };
 
-    setIsProductModalOpen(false);
-    refreshData();
+  const closeProductModal = () => {
+    if (!savingProductRef.current) setIsProductModalOpen(false);
   };
 
   // Handle Delete Product Confirmation
-  const confirmDeleteProduct = () => {
-    if (productToDelete) {
-      productService.deleteProduct(productToDelete.id);
-      setProductToDelete(null);
-      refreshData();
+  const confirmDeleteProduct = async () => {
+    if (!productToDelete) return;
+    const product = productToDelete;
+    setDeleteError("");
+    const key = `delete:${product.id}`;
+    if (pendingRef.current.has(key)) return;
+    pendingRef.current.add(key);
+    setPending((prev) => ({ ...prev, [key]: true }));
+    try {
+      const result = await catalogueAdmin.deleteProduct(product.id);
+      if (result.ok) {
+        await showSaved(`Deleted “${product.name}”.`);
+        setProductToDelete(null);
+      } else {
+        setDeleteError(result.error);
+      }
+    } finally {
+      pendingRef.current.delete(key);
+      setPending((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
     }
   };
 
   // Toggle status directly from table
-  const handleToggleStatus = (id: string) => {
-    productService.toggleProductStatus(id);
-    refreshData();
+  const handleToggleStatus = (product: Product) => {
+    const next = product.status === "enabled" ? "disabled" : "enabled";
+    return runAction(
+      `status:${product.id}`,
+      () => catalogueAdmin.setStatus(product.id, next),
+      next === "enabled" ? `“${product.name}” is now published.` : `“${product.name}” is now hidden from the shop.`
+    );
   };
 
   // Change order status
@@ -319,11 +377,20 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
     }
   };
 
-  // Update size inventory directly
-  const handleQuickStockChange = (productId: string, size: string, count: number) => {
-    productService.updateSizeStock(productId, size, Math.max(0, count));
-    refreshData();
-  };
+  // Update size inventory directly (saved when the field is left or Enter is pressed)
+  const handleStockSave = (product: Product, size: string, value: string) =>
+    runAction(
+      `stock:${product.id}:${size}`,
+      () => catalogueAdmin.setSizeStock(product, size, value),
+      `Saved ${describeSize(size)} stock for “${product.name}”.`
+    );
+
+  // "+5 All" adds 5 to every size; "Mark Out" sets every size to 0
+  const handleRestock = (product: Product) =>
+    runAction(`stock-all:${product.id}`, () => catalogueAdmin.setAllSizes(product, (q) => Math.min(MAX_STOCK, q + 5)), `Added 5 to every size of “${product.name}”.`);
+
+  const handleMarkOut = (product: Product) =>
+    runAction(`stock-all:${product.id}`, () => catalogueAdmin.setAllSizes(product, () => 0), `“${product.name}” is now out of stock in every size.`);
 
   // =========================================================================
   // VIEW 1: ADMIN LOGIN SCREEN (same look as the customer sign-in page)
@@ -555,6 +622,19 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
 
       {/* Main Content Area */}
       <main className="flex-1 container-page py-8">
+        {/* Result of the latest product change */}
+        {notice && (
+          <div
+            className={`status-note status-note-${notice.kind === "error" ? "danger" : notice.kind} mb-6`}
+            role={notice.kind === "success" ? "status" : "alert"}
+          >
+            {notice.kind === "success" ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+            <span className="flex-1">{notice.text}</span>
+            <button type="button" onClick={() => setNotice(null)} className="btn-icon btn-icon-sm" aria-label="Dismiss message">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         
         {/* ========================================================================= */}
         {/* TAB 1: OVERVIEW & ANALYTICS */}
@@ -878,12 +958,15 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                           {/* Published Status Toggle */}
                           <td data-label="Status" className="py-3 px-4">
                             <button
-                              onClick={() => handleToggleStatus(p.id)}
-                              className={`badge cursor-pointer transition-colors ${
+                              onClick={() => handleToggleStatus(p)}
+                              disabled={!!pending[`status:${p.id}`]}
+                              aria-busy={!!pending[`status:${p.id}`]}
+                              title={isPublished ? "Hide from the shop" : "Publish to the shop"}
+                              className={`badge cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-default ${
                                 isPublished ? "badge-success hover:bg-success-line" : "badge-neutral hover:bg-line"
                               }`}
                             >
-                              {isPublished ? "Published" : "Draft / Hidden"}
+                              {pending[`status:${p.id}`] ? "Saving…" : isPublished ? "Published" : "Draft / Hidden"}
                             </button>
                           </td>
 
@@ -966,13 +1049,11 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                               {getSizeOptions(p).map((size) => (
                                 <div key={size} className="flex items-center space-x-1 panel-muted px-2 py-1">
                                   <span className="font-bold text-neutral-600 text-2xs">{size}:</span>
-                                  <input
-                                    type="number"
-                                    min="0"
+                                  <StockInput
                                     value={p.sizeStock?.[size] ?? 0}
-                                    onChange={(e) => handleQuickStockChange(p.id, size, parseInt(e.target.value) || 0)}
-                                    aria-label={`Stock for ${describeSize(size)}`}
-                                    className="w-12 text-center text-xs bg-white border border-neutral-300 rounded-xs px-1 py-1.5 sm:py-0.5 focus:outline-none focus:border-neutral-800"
+                                    label={`Stock for ${describeSize(size)} of ${p.name}`}
+                                    saving={!!pending[`stock:${p.id}:${size}`] || !!pending[`stock-all:${p.id}`]}
+                                    onSave={(value) => handleStockSave(p, size, value)}
                                   />
                                 </div>
                               ))}
@@ -986,19 +1067,17 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                           <td data-label="Quick Restock" className="py-3 px-4 text-right">
                             <div className="flex items-center justify-end space-x-2">
                               <button
-                                onClick={() => {
-                                  productService.restockProduct(p.id, 5);
-                                  refreshData();
-                                }}
+                                onClick={() => handleRestock(p)}
+                                disabled={!!pending[`stock-all:${p.id}`]}
+                                title="Add 5 to every size"
                                 className="btn btn-secondary btn-sm"
                               >
                                 +5 All
                               </button>
                               <button
-                                onClick={() => {
-                                  productService.markOutOfStock(p.id);
-                                  refreshData();
-                                }}
+                                onClick={() => handleMarkOut(p)}
+                                disabled={!!pending[`stock-all:${p.id}`]}
+                                title="Set every size to 0"
                                 className="btn btn-danger-soft btn-sm"
                               >
                                 Mark Out
@@ -1131,7 +1210,8 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                 </p>
               </div>
               <button
-                onClick={() => setIsProductModalOpen(false)}
+                onClick={closeProductModal}
+                disabled={savingProduct}
                 className="btn-icon btn-icon-sm" aria-label="Close"
               >
                 <X className="w-5 h-5" />
@@ -1139,12 +1219,14 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleSaveProduct} className="p-6 overflow-y-auto space-y-4">
+            <form onSubmit={handleSaveProduct} className="p-6 overflow-y-auto space-y-4" aria-busy={savingProduct}>
               {formError && (
                 <div className="status-note status-note-danger" role="alert">
                   {formError}
                 </div>
               )}
+
+              <fieldset disabled={savingProduct} className="space-y-4 min-w-0">
 
               {/* Title */}
               <div>
@@ -1154,6 +1236,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                 <input
                   type="text"
                   required
+                  maxLength={MAX_NAME_LENGTH}
                   placeholder="e.g. Mustard Yellow Silk Chanderi Embroidered Kurta"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -1169,6 +1252,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                 <textarea
                   rows={3}
                   required
+                  maxLength={MAX_DESCRIPTION_LENGTH}
                   placeholder="Detailed description of weave, fabric composition, embroidery work, and care instructions..."
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -1190,7 +1274,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                         ...formData,
                         category: newCat,
                         collection: newCat === "Sarees" ? "ayanaa" : "alankritha",
-                        subcategory: newCat === "Sarees" ? "Banarasi Silk" : "Straight Fit"
+                        subcategory: COLLECTION_STYLES[newCat === "Sarees" ? "ayanaa" : "alankritha"][0]
                       });
                     }}
                     className="field"
@@ -1209,19 +1293,9 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                     onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
                     className="field"
                   >
-                    {formData.category === "Kurtas" ? (
-                      <>
-                        <option value="Straight Fit">Straight Fit</option>
-                        <option value="A-Line">A-Line</option>
-                        <option value="Anarkali">Anarkali</option>
-                      </>
-                    ) : (
-                      <>
-                        <option value="Banarasi Silk">Banarasi Silk</option>
-                        <option value="Organza">Organza</option>
-                        <option value="Katan Silk">Katan Silk</option>
-                      </>
-                    )}
+                    {COLLECTION_STYLES[formData.collection].map((style) => (
+                      <option key={style} value={style}>{style}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1235,6 +1309,8 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                   <input
                     type="number"
                     min="1"
+                    step="1"
+                    inputMode="numeric"
                     required
                     placeholder="3999"
                     value={formData.price}
@@ -1250,6 +1326,8 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                   <input
                     type="number"
                     min="1"
+                    step="1"
+                    inputMode="numeric"
                     placeholder="2999"
                     value={formData.salePrice}
                     onChange={(e) => setFormData({ ...formData, salePrice: e.target.value })}
@@ -1273,7 +1351,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                   aria-describedby="admin-product-image-help"
                 />
                 <p id="admin-product-image-help" className="field-help">
-                  Use a local file in public/images/products (e.g. /images/products/alk-001-front.jpg) or a full URL.
+                  Use a local file in public/images/products (e.g. /images/products/alk-001-front.jpg) or a full https:// URL.
                   Leave empty to show the &ldquo;Image coming soon&rdquo; placeholder. Files mapped in
                   src/data/imageRegistry.ts take priority.
                 </p>
@@ -1301,10 +1379,14 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                       <input
                         type="number"
                         min="0"
+                        max={MAX_STOCK}
+                        step="1"
+                        inputMode="numeric"
+                        aria-label={`Stock for ${describeSize(sz)}`}
                         value={formData.sizeStock[sz] ?? 0}
                         onChange={(e) => setFormData({
                           ...formData,
-                          sizeStock: { ...formData.sizeStock, [sz]: parseInt(e.target.value) || 0 }
+                          sizeStock: { ...formData.sizeStock, [sz]: e.target.value }
                         })}
                         className="field field-sm text-center tabular-nums"
                       />
@@ -1346,20 +1428,32 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                 </label>
               </div>
 
+              </fieldset>
+
               {/* Modal Buttons */}
               <div className="flex items-center justify-end space-x-3 pt-4 border-t border-line">
                 <button
                   type="button"
-                  onClick={() => setIsProductModalOpen(false)}
+                  onClick={closeProductModal}
+                  disabled={savingProduct}
                   className="btn btn-secondary"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
+                  disabled={savingProduct}
+                  aria-busy={savingProduct}
                   className="btn btn-primary"
                 >
-                  Save Product
+                  {savingProduct ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" />
+                      <span>Saving…</span>
+                    </>
+                  ) : (
+                    "Save Product"
+                  )}
                 </button>
               </div>
 
@@ -1381,20 +1475,32 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
               Delete Product?
             </h3>
             <p className="text-body mb-6">
-              Are you sure you want to delete <strong>"{productToDelete.name}"</strong>? This will remove it from the boutique catalogue.
+              Are you sure you want to delete <strong>"{productToDelete.name}"</strong>? This permanently removes it, its stock and its reviews from the boutique catalogue.
             </p>
+            {deleteError && (
+              <div className="status-note status-note-danger mb-4 text-left" role="alert">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{deleteError}</span>
+              </div>
+            )}
             <div className="flex items-center justify-center space-x-3">
               <button
-                onClick={() => setProductToDelete(null)}
+                onClick={() => {
+                  setProductToDelete(null);
+                  setDeleteError("");
+                }}
+                disabled={!!pending[`delete:${productToDelete.id}`]}
                 className="btn btn-secondary"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmDeleteProduct}
+                disabled={!!pending[`delete:${productToDelete.id}`]}
+                aria-busy={!!pending[`delete:${productToDelete.id}`]}
                 className="btn btn-danger"
               >
-                Yes, Delete
+                {pending[`delete:${productToDelete.id}`] ? "Deleting…" : "Yes, Delete"}
               </button>
             </div>
           </div>
@@ -1490,5 +1596,73 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
       )}
 
     </div>
+  );
+}
+
+/**
+ * Stock count for one size in the inventory table. Saved when the field is left or
+ * Enter is pressed (not on every keystroke); Escape puts the saved value back. If a
+ * save fails the typed value stays, marked invalid, so it can be fixed or retried.
+ */
+function StockInput({
+  value,
+  label,
+  saving,
+  onSave,
+}: {
+  value: number;
+  label: string;
+  saving: boolean;
+  onSave: (value: string) => Promise<boolean>;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  const [invalid, setInvalid] = useState(false);
+  const committing = useRef(false);
+
+  useEffect(() => {
+    setDraft(String(value));
+    setInvalid(false);
+  }, [value]);
+
+  const commit = async () => {
+    if (committing.current || draft.trim() === String(value)) return;
+    committing.current = true;
+    try {
+      const ok = await onSave(draft);
+      setInvalid(!ok);
+    } finally {
+      committing.current = false;
+    }
+  };
+
+  return (
+    <input
+      type="number"
+      min="0"
+      max={MAX_STOCK}
+      step="1"
+      inputMode="numeric"
+      value={draft}
+      disabled={saving}
+      aria-label={label}
+      aria-invalid={invalid}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        setInvalid(false);
+      }}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commit();
+        } else if (e.key === "Escape") {
+          setDraft(String(value));
+          setInvalid(false);
+        }
+      }}
+      className={`w-12 text-center text-xs bg-white border rounded-xs px-1 py-1.5 sm:py-0.5 focus:outline-none focus:border-neutral-800 disabled:opacity-60 ${
+        invalid ? "border-danger" : "border-neutral-300"
+      }`}
+    />
   );
 }

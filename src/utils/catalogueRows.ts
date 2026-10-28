@@ -40,9 +40,9 @@ export const rowToProduct = (row: unknown): Product | null => {
   const id = str(row.id);
   const name = str(row.name);
   const category = str(row.category);
-  const image = str(row.image);
+  const image = str(row.image) ?? ""; // optional: the site shows "Image coming soon"
   const price = wholeNumber(row.price);
-  if (!id || !name || !image || (category !== "Kurtas" && category !== "Sarees") || !price || price <= 0) return null;
+  if (!id || !name || (category !== "Kurtas" && category !== "Sarees") || !price || price <= 0) return null;
 
   // Every size this kind of piece is sold in, in display order; missing rows count as sold out
   const stockRows = Array.isArray(row.product_stock) ? row.product_stock.filter(isRow) : [];

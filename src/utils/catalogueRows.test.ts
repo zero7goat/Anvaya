@@ -64,11 +64,16 @@ test("rows the shop cannot show are skipped", () => {
     kurtaRow,
     { ...kurtaRow, id: "no-price", price: null },
     { ...kurtaRow, id: "bad-category", category: "Shoes" },
-    { ...kurtaRow, id: "no-image", image: "" },
+    { ...kurtaRow, id: "no-name", name: "" },
     "not a row",
   ];
   assert.deepEqual(rowsToProducts(rows).map((p) => p.id), ["alk-001"]);
   assert.deepEqual(rowsToProducts(null), []);
+});
+
+test("a product without an image is kept (the site shows a placeholder)", () => {
+  assert.equal(rowToProduct({ ...kurtaRow, image: "" })!.image, "");
+  assert.equal(rowToProduct({ ...kurtaRow, image: null })!.image, "");
 });
 
 test("a sale price above the full price is ignored", () => {
