@@ -1,17 +1,13 @@
-import React, { Fragment, useState, useEffect, useRef } from "react";
+import { Fragment, Suspense, lazy, useState, useEffect, useRef } from "react";
 import Header from "./components/Header";
 import Hero from "./components/Hero";
 import ProductCatalog from "./components/ProductCatalog";
 import CollectionPage from "./components/CollectionPage";
 import Footer from "./components/Footer";
 import CartDrawer from "./components/CartDrawer";
-import CheckoutModal from "./components/CheckoutModal";
 import ProductPage from "./components/ProductPage";
 import QuickView from "./components/QuickView";
-import InboxDrawer from "./components/InboxDrawer";
-import LoginModal from "./components/LoginModal";
 import { CartActionsContext } from "./context/CartActionsContext";
-import AdminDashboard from "./components/AdminDashboard";
 
 import { Product, CartItem, Order, CollectionType } from "./types";
 import { productService } from "./services/productService";
@@ -21,6 +17,40 @@ import { smoothScroll } from "./utils/smoothScroll";
 import { getProductPath } from "./utils/productDisplay";
 import { motion } from "motion/react";
 import { MOTION_TRANSITION } from "./utils/motion";
+import {
+  StoredCartLine,
+  addCartItem,
+  reconcileCart,
+  removeCartItem,
+  sameCart,
+  setCartItemQuantity,
+  toStoredCart,
+} from "./utils/cart";
+
+// Screens most visitors never open load on first use, keeping the first page light
+const AdminDashboard = lazy(() => import("./components/AdminDashboard"));
+const CheckoutModal = lazy(() => import("./components/CheckoutModal"));
+const InboxDrawer = lazy(() => import("./components/InboxDrawer"));
+const LoginModal = lazy(() => import("./components/LoginModal"));
+
+// The cart survives a refresh: only product IDs, sizes and quantities are kept, and
+// they are re-checked against the live catalogue (price, stock) when read back.
+const CART_STORAGE_KEY = "anvaya_cart";
+const readStoredCart = (): StoredCartLine[] => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+const writeStoredCart = (lines: StoredCartLine[]) => {
+  try {
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(lines));
+  } catch {
+    // Storage blocked (private mode): the cart still works for this visit
+  }
+};
 
 type ViewState = "store" | "collection_alankritha" | "collection_ayanaa" | "product" | "admin";
 
@@ -45,8 +75,13 @@ export default function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState<boolean>(false);
+  // Only the code is passed on: checkout recalculates the discount for the cart it shows
   const [appliedPromoCode, setAppliedPromoCode] = useState<string | undefined>(undefined);
-  const [discountAmount, setDiscountAmount] = useState<number>(0);
+  const cartHydrated = useRef(false);
+  // Orders placed in this browser during this visit (shown under "Order updates")
+  const [myOrderIds, setMyOrderIds] = useState<string[]>([]);
+  // Lazily loaded overlays stay mounted once opened, so their state and exit animations survive
+  const [loadedOverlays, setLoadedOverlays] = useState({ checkout: false, inbox: false, login: false });
 
   // Modals & Drawers
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
@@ -72,6 +107,32 @@ export default function App() {
     setProducts(activeProducts);
     setOrders(activeOrders);
   };
+
+  // Keep the cart in step with the live catalogue: restore the saved cart once the
+  // products are known, then re-check prices and stock whenever products change
+  useEffect(() => {
+    if (products.length === 0) return;
+    setCart((prev) => {
+      const lines = cartHydrated.current ? toStoredCart(prev) : readStoredCart();
+      cartHydrated.current = true;
+      const next = reconcileCart(lines, products);
+      return sameCart(prev, next) ? prev : next;
+    });
+  }, [products]);
+
+  useEffect(() => {
+    if (cartHydrated.current) writeStoredCart(toStoredCart(cart));
+  }, [cart]);
+
+  useEffect(() => {
+    if (isCheckoutOpen || isInboxOpen || isLoginOpen) {
+      setLoadedOverlays((prev) => ({
+        checkout: prev.checkout || isCheckoutOpen,
+        inbox: prev.inbox || isInboxOpen,
+        login: prev.login || isLoginOpen,
+      }));
+    }
+  }, [isCheckoutOpen, isInboxOpen, isLoginOpen]);
 
   useEffect(() => {
     loadStorefrontData();
@@ -194,53 +255,23 @@ export default function App() {
   // Total items in cart
   const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  // Add item to cart with size availability validation
+  // Add item to cart (capped at the stock left in that size)
   const handleAddToCart = (product: Product, size: string, quantity: number) => {
-    const sizeStockMax = product.sizeStock ? (product.sizeStock[size] || 0) : 0;
-    if (sizeStockMax <= 0) return;
-
-    setCart((prevCart) => {
-      const existingIdx = prevCart.findIndex(
-        (item) => item.product.id === product.id && item.selectedSize === size
-      );
-      if (existingIdx > -1) {
-        const updated = [...prevCart];
-        const newQty = Math.min(sizeStockMax, updated[existingIdx].quantity + quantity);
-        updated[existingIdx].quantity = newQty;
-        return updated;
-      } else {
-        return [...prevCart, { product, selectedSize: size, quantity: Math.min(sizeStockMax, quantity) }];
-      }
-    });
-
+    if ((product.sizeStock?.[size] || 0) <= 0) return;
+    setCart((prevCart) => addCartItem(prevCart, product, size, quantity));
     setIsCartOpen(true);
   };
 
-  // Update cart item quantity
+  // Update cart item quantity, checked against the live product's stock
   const handleUpdateCartQuantity = (productId: string, size: string, quantity: number) => {
     const product = products.find((p) => p.id === productId);
     if (!product) return;
-    const sizeStockMax = product.sizeStock ? (product.sizeStock[size] || 0) : 0;
-
-    setCart((prevCart) => {
-      const idx = prevCart.findIndex(
-        (item) => item.product.id === productId && item.selectedSize === size
-      );
-      if (idx === -1) return prevCart;
-      const updated = [...prevCart];
-      const boundedQuantity = Math.min(sizeStockMax, Math.max(1, quantity));
-      updated[idx].quantity = boundedQuantity;
-      return updated;
-    });
+    setCart((prevCart) => setCartItemQuantity(prevCart, product, size, quantity));
   };
 
   // Remove item from cart
   const handleRemoveFromCart = (productId: string, size: string) => {
-    setCart((prevCart) =>
-      prevCart.filter(
-        (item) => !(item.product.id === productId && item.selectedSize === size)
-      )
-    );
+    setCart((prevCart) => removeCartItem(prevCart, productId, size));
   };
 
   // Review submission
@@ -262,9 +293,9 @@ export default function App() {
     setCart([]);
     setProducts(updatedProducts.filter(p => p.status === "enabled"));
     setOrders((prev) => [order, ...prev]);
+    setMyOrderIds((prev) => [order.id, ...prev]);
     setUnreadCount((prev) => prev + 1);
     setAppliedPromoCode(undefined);
-    setDiscountAmount(0);
   };
 
   const handleOpenInbox = () => {
@@ -277,10 +308,12 @@ export default function App() {
   // -------------------------------------------------------------
   if (currentView === "admin") {
     return (
-      <AdminDashboard
-        onReturnToStore={handleReturnToStore}
-        onProductsChanged={loadStorefrontData}
-      />
+      <Suspense fallback={<PageLoading />}>
+        <AdminDashboard
+          onReturnToStore={handleReturnToStore}
+          onProductsChanged={loadStorefrontData}
+        />
+      </Suspense>
     );
   }
 
@@ -289,7 +322,7 @@ export default function App() {
   // -------------------------------------------------------------
   return (
     <CartActionsContext.Provider value={{ addToCart: handleAddToCart }}>
-    <div className="min-h-screen bg-canvas text-ink flex flex-col justify-between select-none font-sans">
+    <div className="min-h-screen bg-canvas text-ink flex flex-col justify-between font-sans">
       
       {/* Top Header */}
       <Header
@@ -439,47 +472,61 @@ export default function App() {
         cartItems={cart}
         onUpdateQuantity={handleUpdateCartQuantity}
         onRemoveItem={handleRemoveFromCart}
-        onCheckout={(code, amt) => {
+        onCheckout={(code) => {
           setAppliedPromoCode(code);
-          setDiscountAmount(amt || 0);
           setIsCartOpen(false);
           setIsCheckoutOpen(true);
         }}
       />
 
-      {/* Checkout Modal */}
-      <CheckoutModal
-        isOpen={isCheckoutOpen}
-        onClose={() => setIsCheckoutOpen(false)}
-        cartItems={cart}
-        appliedPromoCode={appliedPromoCode}
-        discountAmount={discountAmount}
-        onOrderSuccess={handleOrderSuccess}
-        onOpenInbox={handleOpenInbox}
-      />
+      {/* Checkout, order updates and sign-in load the first time they are opened */}
+      <Suspense fallback={null}>
+        {loadedOverlays.checkout && (
+          <CheckoutModal
+            isOpen={isCheckoutOpen}
+            onClose={() => setIsCheckoutOpen(false)}
+            cartItems={cart}
+            appliedPromoCode={appliedPromoCode}
+            onOrderSuccess={handleOrderSuccess}
+            onOpenInbox={handleOpenInbox}
+            onCatalogueChanged={loadStorefrontData}
+          />
+        )}
 
-      {/* Client's Email Notifications Inbox Drawer */}
-      <InboxDrawer
-        isOpen={isInboxOpen}
-        onClose={() => setIsInboxOpen(false)}
-        orders={orders}
-        onMarkRead={() => {}}
-      />
+        {/* The shopper's own orders from this visit (never other customers' orders) */}
+        {loadedOverlays.inbox && (
+          <InboxDrawer
+            isOpen={isInboxOpen}
+            onClose={() => setIsInboxOpen(false)}
+            orders={orders.filter((o) => myOrderIds.includes(o.id))}
+          />
+        )}
 
-      {/* Customer Login Modal */}
-      <LoginModal
-        isOpen={isLoginOpen}
-        onClose={() => setIsLoginOpen(false)}
-        onAdminLoginSuccess={() => {
-          navigateTo("admin");
-        }}
-        onClientLoginSuccess={(user) => {
-          setCurrentUser(user);
-        }}
-        footer={renderFooter(() => setIsLoginOpen(false))}
-      />
+        {loadedOverlays.login && (
+          <LoginModal
+            isOpen={isLoginOpen}
+            onClose={() => setIsLoginOpen(false)}
+            onAdminLoginSuccess={() => {
+              navigateTo("admin");
+            }}
+            onClientLoginSuccess={(user) => {
+              setCurrentUser(user);
+            }}
+            footer={renderFooter(() => setIsLoginOpen(false))}
+          />
+        )}
+      </Suspense>
 
     </div>
     </CartActionsContext.Provider>
+  );
+}
+
+// Shown while a lazily loaded page (the admin dashboard) downloads
+function PageLoading() {
+  return (
+    <div className="min-h-screen bg-canvas flex items-center justify-center" role="status" aria-live="polite">
+      <span className="text-sm text-muted">Loading…</span>
+    </div>
   );
 }

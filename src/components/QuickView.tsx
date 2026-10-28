@@ -53,12 +53,15 @@ function QuickViewDialog({
   onAddToCart,
   onViewFullDetails,
 }: Omit<QuickViewProps, "product"> & { product: Product }) {
-  const [selectedSize, setSelectedSize] = useState("");
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   const collection = BOUTIQUE_CONFIG.collections[getCollectionKey(product)];
   const sizes = getSizeOptions(product);
+  // One-size pieces (sarees) start with Free Size chosen when it is in stock
+  const [selectedSize, setSelectedSize] = useState(() =>
+    sizes.length === 1 && (product.sizeStock[sizes[0]] || 0) > 0 ? sizes[0] : ""
+  );
   const isOutOfStock = productService.getTotalStock(product) === 0;
   const selectedStock = selectedSize ? product.sizeStock[selectedSize] || 0 : 0;
   const discountPct = getDiscountPercent(product);
@@ -103,7 +106,11 @@ function QuickViewDialog({
   };
 
   return (
-    <motion.div exit={{ pointerEvents: "none" }} className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6" id="quick-view-root">
+    <motion.div
+      exit={{ pointerEvents: "none" }}
+      className="fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-6 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:py-6"
+      id="quick-view-root"
+    >
       <motion.div
         className="overlay-backdrop"
         {...OVERLAY_MOTION.backdrop}
@@ -116,7 +123,7 @@ function QuickViewDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="quick-view-title"
-        className="dialog-panel relative z-10 w-full max-w-3xl max-h-[calc(100vh-2rem)] overflow-y-auto overscroll-contain"
+        className="dialog-panel relative z-10 flex w-full max-w-md sm:max-w-3xl max-h-full overflow-hidden"
         {...OVERLAY_MOTION.dialog}
         id="quick-view-dialog"
       >
@@ -125,23 +132,26 @@ function QuickViewDialog({
           type="button"
           onClick={onClose}
           aria-label="Close quick preview"
-          className="btn-icon rounded-xs absolute right-3 top-3 z-10 bg-canvas/90"
+          className="btn-icon rounded-xs absolute right-2 top-2 sm:right-3 sm:top-3 z-20 bg-canvas/90 shadow-sm"
         >
           <X className="w-4 h-4" />
         </button>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2">
-          <div className="aspect-[3/4] max-h-[42vh] w-full sm:aspect-auto sm:max-h-none sm:min-h-full overflow-hidden bg-surface-muted">
+        {/* Scrolls inside the panel, so the close button above always stays in view */}
+        <div className="flex-1 min-w-0 overflow-y-auto overscroll-contain grid grid-cols-1 sm:grid-cols-2 sm:items-start">
+          {/* The whole garment stays visible: the photo is contained, never cropped. Phones
+              give it about half the screen height; wider screens pin it beside the details. */}
+          <div className="h-[min(52svh,30rem)] sm:sticky sm:top-0 sm:h-[min(36rem,calc(100svh-3rem))] w-full bg-surface-muted">
             <ProductImage
               src={getProductImage(product)}
               alt={product.name}
-              className="w-full h-full min-h-56 object-cover"
+              className="w-full h-full object-contain"
               loading="eager"
               sizes="(min-width: 640px) 320px, 100vw"
             />
           </div>
 
-          <div className="p-6 sm:p-7 flex flex-col gap-4">
+          <div className="p-4 min-[400px]:p-5 sm:p-7 flex flex-col gap-4 sm:min-h-[min(36rem,calc(100svh-3rem))]">
             <div className="space-y-1.5 pr-8">
               <span className="eyebrow">
                 {collection.name}
@@ -183,7 +193,7 @@ function QuickViewDialog({
                   )}
                 </span>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5 min-[400px]:gap-2">
                 {sizes.map((size) => {
                   const count = product.sizeStock[size] || 0;
                   const sizeOut = count === 0;
@@ -195,7 +205,7 @@ function QuickViewDialog({
                       onClick={() => setSelectedSize(size)}
                       aria-pressed={selectedSize === size}
                       aria-label={`Size ${size}, ${sizeOut ? "sold out" : `${count} in stock`}`}
-                      className="size-option min-w-12"
+                      className="size-option min-w-12 min-h-11"
                     >
                       {size}
                     </button>

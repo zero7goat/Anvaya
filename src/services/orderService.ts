@@ -1,5 +1,6 @@
 import { Order } from "../types";
 import { BOUTIQUE_CONFIG } from "../config";
+import { FREE_SIZE } from "../utils/sizes";
 
 /**
  * SAMPLE ORDERS FOR ALANKRITHA BOUTIQUE (DEMO STATE)
@@ -48,7 +49,7 @@ export const INITIAL_SAMPLE_ORDERS: Order[] = [
         name: "Royal Mayura Banarasi Katan Silk Saree",
         price: 7499,
         quantity: 1,
-        selectedSize: "M"
+        selectedSize: "Free Size"
       }
     ],
     total: 7499,
@@ -121,7 +122,11 @@ class OrderService {
     const today = new Date();
     const dateStr = today.toISOString().split("T")[0];
     const timeStr = today.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false });
-    const orderId = `ALK-${Math.floor(100000 + Math.random() * 900000)}`;
+    // Random reference, re-drawn until it does not clash with an existing order
+    let orderId = "";
+    do {
+      orderId = `ALK-${Math.floor(100000 + Math.random() * 900000)}`;
+    } while (this.orders.some(o => o.id === orderId));
 
     const newOrder: Order = {
       ...orderData,
@@ -162,7 +167,7 @@ class OrderService {
    */
   public generateWhatsAppProductEnquiryUrl(productName: string, selectedSize?: string): string {
     const text = `Namaste ALANKRITHA! I am interested in inquiring about the "${productName}"${
-      selectedSize ? ` in Size "${selectedSize}"` : ""
+      selectedSize ? ` in ${selectedSize === FREE_SIZE ? FREE_SIZE : `Size "${selectedSize}"`}` : ""
     }. Could you please share more details or photos? Thank you!`;
     const cleanPhone = BOUTIQUE_CONFIG.whatsappNumber.replace(/\D/g, "");
     return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
@@ -180,6 +185,8 @@ class OrderService {
     pincode: string;
     items: { name: string; selectedSize: string; quantity: number; price: number }[];
     subtotal: number;
+    discount?: number;
+    couponCode?: string;
     shippingCost: number;
     grandTotal: number;
     orderId?: string;
@@ -196,7 +203,9 @@ I would like to place an order${params.orderId ? ` (Reference: #${params.orderId
 ${itemLines}
 
 💰 *PRICE BREAKDOWN:*
-• Subtotal: ₹${params.subtotal.toLocaleString("en-IN")}
+• Subtotal: ₹${params.subtotal.toLocaleString("en-IN")}${
+      params.discount ? `\n• Coupon${params.couponCode ? ` ${params.couponCode}` : ""}: -₹${params.discount.toLocaleString("en-IN")}` : ""
+    }
 • Delivery: ${params.shippingCost === 0 ? "FREE" : `₹${params.shippingCost}`}
 • *Grand Total: ₹${params.grandTotal.toLocaleString("en-IN")}*
 

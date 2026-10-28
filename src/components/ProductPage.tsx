@@ -11,10 +11,12 @@ import {
   getDiscountPercent,
   getEffectivePrice,
   getGalleryImages,
+  describeSize,
   getSizeOptions,
 } from "../utils/productDisplay";
 import ProductCard from "./ProductCard";
 import ProductReviews from "./ProductReviews";
+import RecentlyViewed from "./RecentlyViewed";
 import ProductGallery from "./ProductGallery";
 import MobileProductGallery from "./MobileProductGallery";
 import { useIsMobile } from "../hooks/useIsMobile";
@@ -69,6 +71,7 @@ export default function ProductPage({
     <Fragment key={product.id}>
       <ProductDetails
         product={product}
+        products={products}
         onAddToCart={onAddToCart}
         onBuyNow={onBuyNow}
         onNewReview={onNewReview}
@@ -83,6 +86,7 @@ export default function ProductPage({
 
 function ProductDetails({
   product,
+  products,
   onAddToCart,
   onBuyNow,
   onNewReview,
@@ -90,7 +94,7 @@ function ProductDetails({
   onQuickView,
   onNavigateHome,
   onNavigateCollection,
-}: Omit<ProductPageProps, "productId" | "products"> & { product: Product }) {
+}: Omit<ProductPageProps, "productId"> & { product: Product }) {
   const collectionKey = getCollectionKey(product);
   const collection = BOUTIQUE_CONFIG.collections[collectionKey];
 
@@ -98,11 +102,14 @@ function ProductDetails({
   // Phones get a full-width swipe gallery; only one gallery is ever rendered
   const isMobile = useIsMobile();
   const codEnabled = BOUTIQUE_CONFIG.paymentMethods.some((m) => m.id === "cod" && m.enabled);
-  const [selectedSize, setSelectedSize] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [addedSuccess, setAddedSuccess] = useState(false);
 
   const sizes = getSizeOptions(product);
+  // One-size pieces (sarees) start with Free Size chosen when it is in stock
+  const [selectedSize, setSelectedSize] = useState(() =>
+    sizes.length === 1 && (product.sizeStock[sizes[0]] || 0) > 0 ? sizes[0] : ""
+  );
   const totalStock = productService.getTotalStock(product);
   const isOutOfStock = totalStock === 0;
   const selectedStock = selectedSize ? product.sizeStock[selectedSize] || 0 : 0;
@@ -293,9 +300,9 @@ function ProductDetails({
               {isOutOfStock ? (
                 <StockNote tone="danger">Sold out: this piece is currently unavailable.</StockNote>
               ) : selectedSize && selectedStock <= LOW_STOCK_THRESHOLD ? (
-                <StockNote tone="warning">Only {selectedStock} left in size {selectedSize}.</StockNote>
+                <StockNote tone="warning">Only {selectedStock} left in {describeSize(selectedSize)}.</StockNote>
               ) : selectedSize ? (
-                <StockNote tone="success">In stock in size {selectedSize}: {selectedStock} available.</StockNote>
+                <StockNote tone="success">In stock in {describeSize(selectedSize)}: {selectedStock} available.</StockNote>
               ) : (
                 <StockNote tone="success">In stock. Select a size to see availability.</StockNote>
               )}
@@ -413,15 +420,6 @@ function ProductDetails({
           </section>
         </div>
 
-        {/* Reviews */}
-        <section id="product-reviews" aria-labelledby="product-reviews-heading" className="relative isolate mt-16 sm:mt-20 pt-10 border-t border-line scroll-mt-28">
-          <BackgroundMotif kind="paisley" className="right-2 md:right-auto md:left-[30%] top-4 md:top-16 w-14 h-24 md:w-24 md:h-40 -rotate-[25deg]" />
-          <h2 id="product-reviews-heading" className="heading-card mb-6">
-            Customer Reviews
-          </h2>
-          <ProductReviews product={product} onNewReview={onNewReview} />
-        </section>
-
         {/* Similar products from the same collection */}
         <section aria-labelledby="similar-products-heading" className="mt-16 sm:mt-20 pt-10 border-t border-line">
           <div className="flex items-baseline justify-between gap-4 mb-6">
@@ -452,6 +450,19 @@ function ProductDetails({
             </div>
           )}
         </section>
+
+        {/* Pieces this shopper opened before (not the current one) */}
+        <RecentlyViewed
+          currentProductId={product.id}
+          products={products}
+          onOpenProduct={onOpenProduct}
+          onQuickView={onQuickView}
+        />
+
+        {/* Write a Review, then Customer Reviews, at the end of the page */}
+        <ProductReviews product={product} onNewReview={onNewReview}>
+          <BackgroundMotif kind="paisley" className="right-2 md:right-auto md:left-[30%] top-4 md:top-16 w-14 h-24 md:w-24 md:h-40 -rotate-[25deg]" />
+        </ProductReviews>
       </div>
     </div>
   );

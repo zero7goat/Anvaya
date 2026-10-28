@@ -166,8 +166,9 @@ export default function ProductCard({ product, variant = "catalogue", onOpen, on
             </h3>
           </div>
 
-          <div className="mt-3 pt-3 border-t border-line flex items-baseline justify-between gap-2">
-            <div className="flex items-baseline gap-1.5">
+          {/* Price and availability wrap onto two lines when the card is narrow */}
+          <div className="mt-3 pt-3 border-t border-line flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+            <div className="flex flex-wrap items-baseline gap-x-1.5">
               <span className="price text-sm sm:text-base">
                 {formatINR(getEffectivePrice(product))}
               </span>
@@ -183,7 +184,7 @@ export default function ProductCard({ product, variant = "catalogue", onOpen, on
                 {isAvailable ? "In Stock" : "Sold Out"}
               </span>
             ) : (
-              <span className="text-2xs text-muted">
+              <span className="text-2xs text-muted whitespace-nowrap">
                 {getAvailableSizes(product).join(", ") || "Out of stock"}
               </span>
             )}

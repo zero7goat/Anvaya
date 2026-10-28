@@ -110,11 +110,11 @@ export default function Header({
           <div className="flex items-center justify-between h-14 sm:h-16">
             
             {/* Left Zone: Hamburger Menu & ANVAYA Logo (Emblem + Wordmark) */}
-            <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               {/* Hamburger Menu Icon */}
               <button
                 onClick={() => setIsMobileMenuOpen(true)}
-                className="p-1 text-white hover:text-gold-300 transition-colors cursor-pointer"
+                className="-ml-2.5 p-2.5 text-white hover:text-gold-300 transition-colors cursor-pointer"
                 aria-label="Open navigation menu"
                 id="menu-trigger-btn"
               >
@@ -130,7 +130,7 @@ export default function Header({
               >
                 {/* Emblem from Logo.png in images folder */}
                 <img
-                  src="/images/Logo.png"
+                  src="/images/logo-144.png" width={159} height={144}
                   alt="ANVAYA Motif"
                   className="h-7 sm:h-8 md:h-9 w-auto object-contain brightness-105"
                   loading="eager"
@@ -145,14 +145,14 @@ export default function Header({
             </div>
 
             {/* Right Zone: Search, Shopping Cart, User Profile */}
-            <div className="flex items-center gap-4 sm:gap-6 shrink-0" id="header-right-actions">
+            <div className="flex items-center -mr-2.5 sm:gap-2 shrink-0" id="header-right-actions">
               
               {/* Search Toggle Icon */}
               <button
                 onClick={() => setIsSearchOpen(true)}
                 aria-haspopup="dialog"
                 aria-expanded={isSearchOpen}
-                className="p-1 text-white hover:text-gold-300 transition-colors cursor-pointer"
+                className="p-2.5 text-white hover:text-gold-300 transition-colors cursor-pointer"
                 title="Search Kurtas & Sarees"
                 aria-label="Search"
                 id="header-search-btn"
@@ -163,14 +163,14 @@ export default function Header({
               {/* Shopping Cart Icon */}
               <button
                 onClick={toggleCart}
-                className="relative p-1 text-white hover:text-gold-300 transition-colors cursor-pointer flex items-center"
+                className="relative p-2.5 text-white hover:text-gold-300 transition-colors cursor-pointer flex items-center"
                 title="Shopping Bag"
                 aria-label="View Cart"
                 id="header-cart-btn"
               >
                 <ShoppingCart className="w-5 h-5 stroke-[1.8]" />
                 {cartCount > 0 && (
-                  <span className="absolute -top-1.5 -right-2 min-w-4 h-4 px-1 rounded-full bg-gold-500 text-maroon-950 text-2xs font-bold flex items-center justify-center leading-none">
+                  <span className="absolute top-0.5 right-0 min-w-4 h-4 px-1 rounded-full bg-gold-500 text-maroon-950 text-2xs font-bold flex items-center justify-center leading-none">
                     {cartCount}
                   </span>
                 )}
@@ -179,14 +179,14 @@ export default function Header({
               {/* User Profile / Account Icon */}
               <button
                 onClick={currentUser ? onLogout : toggleLogin}
-                className="relative p-1 text-white hover:text-gold-300 transition-colors cursor-pointer"
+                className="relative p-2.5 text-white hover:text-gold-300 transition-colors cursor-pointer"
                 title={currentUser ? `Signed in as ${currentUser}` : "Sign In / Account"}
                 aria-label="User Account"
                 id="header-user-btn"
               >
                 <User className="w-5 h-5 stroke-[1.8]" />
                 {currentUser && (
-                  <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-success ring-2 ring-maroon-950" />
+                  <span className="absolute bottom-2 right-2 w-2 h-2 rounded-full bg-success ring-2 ring-maroon-950" />
                 )}
               </button>
             </div>

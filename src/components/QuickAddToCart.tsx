@@ -30,7 +30,8 @@ export function useQuickAdd(product: Product, { solid = false }: { solid?: boole
       onClick={(e: MouseEvent<HTMLButtonElement>) => {
         e.preventDefault();
         e.stopPropagation();
-        setOpen(!open);
+        if (sizes.length === 1) cart!.addToCart(product, sizes[0], 1);
+        else setOpen(!open);
       }}
       aria-label={`Add ${product.name} to cart`}
       aria-expanded={open}
@@ -109,7 +110,7 @@ function SizePicker({
           initial={{ y: "100%", opacity: 0 }}
           animate={{ y: 0, opacity: 1, transition: MOTION_TRANSITION.fast }}
           exit={{ y: "100%", opacity: 0, transition: { duration: 0.25 } }}
-          className="absolute inset-x-0 bottom-0 z-20 bg-white/95 backdrop-blur-sm px-3 pt-2.5 pb-3 pointer-events-auto"
+          className="@container absolute inset-x-0 bottom-0 z-20 bg-white/95 backdrop-blur-sm px-3 pt-2.5 pb-3 pointer-events-auto"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-2xs font-semibold uppercase tracking-[0.14em] text-ink">Select size</span>
@@ -122,7 +123,9 @@ function SizePicker({
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
-          <div className="grid grid-cols-4 gap-1.5">
+          {/* Sarees: one row of four. Kurtas: one row of five, or 3 + 2 on narrow cards
+              so each size stays easy to tap */}
+          <div className={`grid gap-1 ${sizes.length > 4 ? "grid-cols-3 @[13rem]:grid-cols-5" : "grid-cols-4"}`}>
             {sizes.map((size) => {
               const out = (product.sizeStock[size] || 0) === 0;
               return (
@@ -132,7 +135,7 @@ function SizePicker({
                   disabled={out}
                   onClick={() => onPick(size)}
                   aria-label={out ? `Size ${size}, sold out` : `Add size ${size} to cart`}
-                  className="h-8 border border-line-strong text-xs font-semibold text-ink transition-colors cursor-pointer hover:bg-maroon-700 hover:border-maroon-700 hover:text-white disabled:cursor-not-allowed disabled:text-muted/50 disabled:line-through disabled:hover:bg-transparent disabled:hover:border-line-strong disabled:hover:text-muted/50"
+                  className="h-8 min-w-0 px-0 border border-line-strong text-[11px] sm:text-xs font-semibold text-ink transition-colors cursor-pointer hover:bg-maroon-700 hover:border-maroon-700 hover:text-white disabled:cursor-not-allowed disabled:text-muted/50 disabled:line-through disabled:hover:bg-transparent disabled:hover:border-line-strong disabled:hover:text-muted/50"
                 >
                   {size}
                 </button>

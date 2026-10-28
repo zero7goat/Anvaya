@@ -49,7 +49,8 @@ export default function Footer({ onSelectCategory, onNavigateCollection, onNavig
       .map((style) => ({ col, style, label: `${style} ${collections[col].category}` }))
   );
 
-  const linkClass = "link-underline text-left text-white/80 hover:text-white transition-colors cursor-pointer";
+  // Phones: taller links so each one is easy to tap
+  const linkClass = "link-underline inline-block py-1.5 md:py-0 text-left text-white/80 hover:text-white transition-colors cursor-pointer";
 
   return (
     <footer className="text-canvas font-sans bg-maroon-800" id="anvaya-footer">
@@ -179,7 +180,7 @@ function FooterColumn({ title, id, children }: { title: string; id: string; chil
   return (
     <nav aria-label={title} id={id} className="min-w-0">
       <h2 className="text-sm sm:text-base font-semibold uppercase tracking-[0.08em] text-gold-300 mb-5">{title}</h2>
-      <ul className="space-y-3.5 text-sm">{children}</ul>
+      <ul className="space-y-1.5 md:space-y-3.5 text-sm">{children}</ul>
     </nav>
   );
 }

@@ -1,243 +1,164 @@
-import { useState } from "react";
+import { Fragment, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { OVERLAY_MOTION } from "../utils/motion";
-import { X, Mail, MailOpen, Calendar, User, ShoppingBag } from "lucide-react";
+import { X, Package, MessageSquare } from "lucide-react";
 import { Order } from "../types";
+import { orderService } from "../services/orderService";
+import { formatINR } from "../utils/productDisplay";
+import { useOverlay } from "../hooks/useOverlay";
 
 interface InboxDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  // Only the orders this shopper placed in this browser during this visit
   orders: Order[];
-  onMarkRead: (orderId: string) => void;
 }
 
-// Simple and high-fidelity custom Markdown renderer to parse headers, bolding, lists, and horizontal dividers
-function MarkdownEmailRenderer({ content }: { content: string }) {
-  if (!content) return null;
+const STATUS_TONE: Record<Order["status"], string> = {
+  Pending: "badge-warning",
+  Confirmed: "badge-success",
+  Shipped: "badge-success",
+  Delivered: "badge-success",
+  Cancelled: "badge-danger",
+  Returned: "badge-neutral",
+};
 
-  const lines = content.split("\n");
+/**
+ * "Order updates": the shopper's own orders from this visit, newest first, with the
+ * pieces, sizes, total and current status. Nothing is emailed; each order can be sent
+ * to the boutique on WhatsApp, which is how the boutique receives it.
+ */
+export default function InboxDrawer({ isOpen, onClose, orders }: InboxDrawerProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useOverlay(isOpen, onClose, panelRef);
 
-  return (
-    <div className="space-y-3 text-xs text-ink font-sans leading-relaxed">
-      {lines.map((line, idx) => {
-        const trimmed = line.trim();
-
-        // 1. Horizontal Rules
-        if (trimmed === "---") {
-          return <hr key={idx} className="border-t border-line/60 my-4" />;
-        }
-
-        // 2. Main Headers (# Title)
-        if (trimmed.startsWith("# ")) {
-          return (
-            <h1 key={idx} className="heading-card pt-3 pb-1 border-b border-line">
-              {trimmed.slice(2)}
-            </h1>
-          );
-        }
-
-        // 3. Sub-Headers (### Sub)
-        if (trimmed.startsWith("### ")) {
-          return (
-            <h3 key={idx} className="eyebrow pt-4 pb-1">
-              {trimmed.slice(4)}
-            </h3>
-          );
-        }
-
-        // 4. Bullet Lists
-        if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
-          const rawText = trimmed.slice(2);
-          return (
-            <div key={idx} className="flex items-start pl-3 my-1">
-              <span className="text-accent mr-2 font-bold">•</span>
-              <span>{parseBoldText(rawText)}</span>
-            </div>
-          );
-        }
-
-        // 5. Empty Lines
-        if (trimmed === "") {
-          return <div key={idx} className="h-2" />;
-        }
-
-        // 6. Default Paragraphs
-        return (
-          <p key={idx} className="font-light">
-            {parseBoldText(trimmed)}
-          </p>
-        );
-      })}
-    </div>
-  );
-}
-
-// Utility to parse inline **bold text**
-function parseBoldText(text: string) {
-  const parts = text.split(/\*\*(.*?)\*\*/g);
-  return parts.map((part, i) => {
-    if (i % 2 === 1) {
-      return <strong key={i} className="font-bold text-ink">{part}</strong>;
-    }
-    return part;
-  });
-}
-
-export default function InboxDrawer({
-  isOpen,
-  onClose,
-  orders,
-  onMarkRead,
-}: InboxDrawerProps) {
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-
-  // Sorting orders to display most recent at top
-  const sortedOrders = [...orders].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
-
-  const handleSelectOrder = (order: Order) => {
-    setSelectedOrder(order);
-    onMarkRead(order.id);
-  };
+  const sortedOrders = [...orders].sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`));
 
   return (
     <AnimatePresence>
       {isOpen && (
-    <motion.div key="inbox-drawer" {...OVERLAY_MOTION.backdrop} className="fixed inset-0 z-50 overflow-hidden" id="inbox-drawer-root">
-      {/* Backdrop */}
-      <div
-        className="overlay-backdrop absolute"
-        onClick={onClose}
-        id="inbox-backdrop"
-      ></div>
+        <motion.div key="inbox-drawer" {...OVERLAY_MOTION.backdrop} className="fixed inset-0 z-50 overflow-hidden" id="inbox-drawer-root">
+          <div className="overlay-backdrop absolute" onClick={onClose} id="inbox-backdrop" />
 
-      <div className="absolute inset-y-0 right-0 max-w-full flex pl-10" id="inbox-slider-container">
-        <motion.div
-          {...OVERLAY_MOTION.drawerRight}
-          className="w-screen max-w-2xl bg-canvas flex flex-col h-full shadow-2xl"
-          id="inbox-card"
-        >
-          {/* Header */}
-          <div className="px-4 py-4 sm:px-6 border-b border-line flex items-center justify-between bg-surface" id="inbox-header">
-            <div className="flex items-center space-x-2">
-              <Mail className="w-5 h-5 text-accent" />
-              <h2 className="heading-card text-lg sm:text-lg">Style Notifications</h2>
-              <span className="badge badge-neutral tabular-nums">
-                {orders.length}
-              </span>
-            </div>
-            <button
-              onClick={onClose}
-              className="btn-icon" aria-label="Close notifications"
-              id="close-inbox-btn"
+          <div className="absolute inset-y-0 right-0 max-w-full flex pl-10" id="inbox-slider-container">
+            <motion.div
+              ref={panelRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="inbox-title"
+              tabIndex={-1}
+              {...OVERLAY_MOTION.drawerRight}
+              className="w-[calc(100vw-2.5rem)] max-w-md bg-canvas flex flex-col h-full shadow-2xl outline-none"
+              id="inbox-card"
             >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="flex-1 flex overflow-hidden" id="inbox-dual-pane">
-            
-            {/* Left Pane: Mail List */}
-            <div className="w-1/2 border-r border-line/50 overflow-y-auto" id="inbox-mail-list">
-              {sortedOrders.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-3">
-                  <Mail className="w-8 h-8 text-line" />
-                  <p className="text-xs text-muted italic font-light">
-                    No status emails found. Your personalized order logs will appear here once you place a request.
-                  </p>
+              <div className="px-4 py-4 sm:px-6 border-b border-line flex items-center justify-between gap-3 bg-surface" id="inbox-header">
+                <div className="flex items-center gap-2">
+                  <Package className="w-5 h-5 text-accent" aria-hidden="true" />
+                  <h2 id="inbox-title" className="heading-card text-lg sm:text-lg">
+                    Your Orders
+                  </h2>
+                  {orders.length > 0 && <span className="badge badge-neutral tabular-nums">{orders.length}</span>}
                 </div>
-              ) : (
-                <div className="divide-y divide-line/40">
-                  {sortedOrders.map((order) => {
-                    const isSelected = selectedOrder?.id === order.id;
-                    const formattedDate = new Date(order.date).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                    });
+                <button onClick={onClose} className="btn-icon" aria-label="Close order updates" id="close-inbox-btn">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-                    return (
-                      <button
-                        key={order.id}
-                        onClick={() => handleSelectOrder(order)}
-                        className={`w-full text-left p-4 transition-all hover:bg-surface-muted/25 flex flex-col space-y-1.5 border-l-2 cursor-pointer ${
-                          isSelected
-                            ? "bg-surface-muted/50 border-accent"
-                            : "border-transparent"
-                        }`}
-                      >
-                        <div className="flex justify-between items-center w-full">
-                          <span className="eyebrow">
-                            Order #{order.id.slice(-6).toUpperCase()}
-                          </span>
-                          <span className="text-2xs text-muted">{formattedDate}</span>
-                        </div>
-                        <h4 className="text-xs font-semibold text-ink line-clamp-1">
-                          {order.status === "Pending"
-                            ? "Order Confirmation Receipt"
-                            : order.status === "Shipped"
-                            ? "Your Wardrobe is on the Way!"
-                            : "Delivered: Experience the Fit"}
-                        </h4>
-                        <p className="text-2xs text-muted line-clamp-2 font-light leading-relaxed">
-                          Status: <span className="font-bold uppercase tracking-wider text-2xs">{order.status}</span> • To {order.customerName}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Right Pane: Selected Mail Detail Content */}
-            <div className="w-1/2 overflow-y-auto p-5 bg-surface-muted/10" id="inbox-mail-content-pane">
-              {selectedOrder ? (
-                <div className="space-y-4" id="inbox-selected-email">
-                  {/* Sender & Receiver metadata card */}
-                  <div className="panel-muted p-4 space-y-1.5 text-xs" id="email-metadata-card">
-                    <div className="flex items-center space-x-1.5">
-                      <User className="w-3.5 h-3.5 text-accent" />
-                      <span className="text-muted">From:</span>
-                      <strong className="text-ink">AURA & CO. Client Services</strong>
-                    </div>
-                    <div className="flex items-center space-x-1.5">
-                      <MailOpen className="w-3.5 h-3.5 text-accent" />
-                      <span className="text-muted">To:</span>
-                      <strong className="text-ink">{selectedOrder.customerEmail}</strong>
-                    </div>
-                    <div className="flex items-center space-x-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-accent" />
-                      <span className="text-muted">Date:</span>
-                      <span className="text-ink">{selectedOrder.date}</span>
-                    </div>
-                    <div className="flex items-center space-x-1.5 pt-1.5 border-t border-line/40">
-                      <ShoppingBag className="w-3.5 h-3.5 text-accent" />
-                      <span className="text-muted">Order Total:</span>
-                      <strong className="text-accent">${selectedOrder.total.toFixed(2)}</strong>
-                    </div>
+              <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-4" id="inbox-order-list">
+                {sortedOrders.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center gap-3 px-4">
+                    <Package className="w-9 h-9 text-line-strong" aria-hidden="true" />
+                    <p className="text-sm text-muted leading-relaxed max-w-xs">
+                      Orders you place during this visit appear here, with their status.
+                    </p>
                   </div>
+                ) : (
+                  sortedOrders.map((order) => (
+                    <Fragment key={order.id}>
+                      <OrderCard order={order} />
+                    </Fragment>
+                  ))
+                )}
+              </div>
 
-                  {/* Render content */}
-                  <div className="panel p-5" id="email-body-box">
-                    <MarkdownEmailRenderer content={selectedOrder.emailContent || ""} />
-                  </div>
-                </div>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-3 text-muted font-light" id="inbox-empty-detail">
-                  <MailOpen className="w-8 h-8 text-line" />
-                  <p className="text-xs italic">
-                    Select a style notification email from the left pane to view personalized Gemini formatting.
-                  </p>
-                </div>
-              )}
-            </div>
-
+              <p className="px-4 sm:px-6 py-3 border-t border-line text-xs text-muted bg-surface">
+                Orders are kept in this browser until you send them to the boutique on WhatsApp.
+              </p>
+            </motion.div>
           </div>
-
         </motion.div>
-      </div>
-    </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+function OrderCard({ order }: { order: Order }) {
+  const subtotal = order.subtotal ?? order.items.reduce((sum, it) => sum + it.price * it.quantity, 0);
+  const { url } = orderService.generateWhatsAppOrderUrl({
+    customerName: order.customerName,
+    customerPhone: order.customerPhone,
+    address: order.address,
+    city: order.city,
+    state: order.state,
+    pincode: order.pincode,
+    items: order.items.map((it) => ({ name: it.name, selectedSize: it.selectedSize, quantity: it.quantity, price: it.price })),
+    subtotal,
+    discount: order.discount,
+    couponCode: order.couponCode,
+    shippingCost: order.shippingCost ?? 0,
+    grandTotal: order.total,
+    orderId: order.id,
+  });
+
+  return (
+    <article className="panel p-4 space-y-3 text-sm" aria-labelledby={`order-${order.id}-title`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 id={`order-${order.id}-title`} className="font-semibold text-ink tabular-nums">
+          Order #{order.id}
+        </h3>
+        <span className={`badge ${STATUS_TONE[order.status] || "badge-neutral"}`}>{order.status}</span>
+      </div>
+      <p className="text-xs text-muted tabular-nums">
+        Placed {order.date} at {order.time} · {order.paymentMethod === "COD" ? "Cash on Delivery" : order.paymentMethod}
+      </p>
+
+      <ul className="space-y-1.5 border-y border-line py-3">
+        {order.items.map((it) => (
+          <li key={`${it.productId}-${it.selectedSize}`} className="flex justify-between gap-3 text-xs">
+            <span className="min-w-0 text-ink">
+              {it.name}
+              <span className="block text-muted">
+                Size {it.selectedSize} · Qty {it.quantity}
+              </span>
+            </span>
+            <span className="shrink-0 tabular-nums">{formatINR(it.price * it.quantity)}</span>
+          </li>
+        ))}
+      </ul>
+
+      <dl className="space-y-1 text-xs">
+        {order.discount ? (
+          <div className="flex justify-between text-success">
+            <dt>Coupon{order.couponCode ? ` ${order.couponCode}` : ""}</dt>
+            <dd className="tabular-nums">-{formatINR(order.discount)}</dd>
+          </div>
+        ) : null}
+        {order.shippingCost !== undefined && (
+          <div className="flex justify-between">
+            <dt className="text-muted">Delivery</dt>
+            <dd className="tabular-nums">{order.shippingCost === 0 ? "Free" : formatINR(order.shippingCost)}</dd>
+          </div>
+        )}
+        <div className="flex justify-between font-semibold text-ink">
+          <dt>Total due on delivery</dt>
+          <dd className="tabular-nums">{formatINR(order.total)}</dd>
+        </div>
+      </dl>
+
+      <a href={url} target="_blank" rel="noopener noreferrer" className="btn btn-whatsapp btn-sm btn-block">
+        <MessageSquare className="w-3.5 h-3.5" aria-hidden="true" />
+        Send to the boutique on WhatsApp
+      </a>
+    </article>
   );
 }

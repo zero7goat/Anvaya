@@ -9,7 +9,7 @@ import { getStyleCards } from "./ShopByStyle";
 
 const SLIDES = SITE_IMAGES.mobileHeroSlides;
 const AUTOPLAY_MS = 5500;
-// Delay before the neighbouring banners start downloading on first load
+// Delay before the next banner starts downloading on first load
 const PRELOAD_DELAY_MS = 1500;
 const SWIPE_THRESHOLD_PX = 40;
 const slideSources = (slide: HeroSlide) => responsiveImage(slide.image, IMAGE_WIDTHS.mobileHero);
@@ -82,10 +82,12 @@ export default function MobileHero({
     }
   };
 
-  const loadNeighbours = () =>
+  // The next banner (where autoplay goes); the previous one too once a finger is on
+  // the banner, since a swipe can go either way
+  const loadNeighbours = (both: boolean) =>
     setLoaded((prev) => {
       const n = SLIDES.length;
-      const want = [current, (current + 1) % n, (current - 1 + n) % n];
+      const want = [current, (current + 1) % n, ...(both ? [(current - 1 + n) % n] : [])];
       return want.every((i) => prev.has(i)) ? prev : new Set([...prev, ...want]);
     });
 
@@ -97,15 +99,15 @@ export default function MobileHero({
     return () => clearTimeout(timer);
   }, [current, dragX]);
 
-  // Load the banners on either side (after a short head start on first load) so they are ready
+  // Load the next banner (after a short head start on first load) so it is ready in time
   useEffect(() => {
-    const timer = setTimeout(loadNeighbours, previous === null ? PRELOAD_DELAY_MS : 0);
+    const timer = setTimeout(() => loadNeighbours(false), previous === null ? PRELOAD_DELAY_MS : 0);
     return () => clearTimeout(timer);
   }, [current]);
 
   const onTouchStart = (e: TouchEvent) => {
     touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, dx: 0, horizontal: null };
-    loadNeighbours();
+    loadNeighbours(true);
   };
   const onTouchMove = (e: TouchEvent) => {
     const t = touch.current;
@@ -204,7 +206,7 @@ export default function MobileHero({
         </div>
 
         {/* Slide indicators: short dashes, the current one solid */}
-        <div className="absolute bottom-3 inset-x-0 flex justify-center gap-2 z-10" id="mobile-hero-dots">
+        <div className="absolute bottom-1 inset-x-0 flex justify-center gap-0.5 z-10" id="mobile-hero-dots">
           {SLIDES.map((s, idx) => (
             <button
               key={s.id}
@@ -212,7 +214,7 @@ export default function MobileHero({
               onClick={() => goTo(idx, idx > current ? 1 : -1)}
               aria-label={`Go to slide ${idx + 1}`}
               aria-current={current === idx}
-              className="py-2 cursor-pointer"
+              className="py-3 px-1 cursor-pointer"
             >
               <span
                 className={`block h-1 rounded-full transition-all duration-500 ${
@@ -307,7 +309,7 @@ function StyleShortcuts({
             >
               <ArchFrame>
                 <img
-                  src={imageAtWidth(card.image, 360)}
+                  src={imageAtWidth(card.image, 200)}
                   alt=""
                   loading="lazy"
                   decoding="async"

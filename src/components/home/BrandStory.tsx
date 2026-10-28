@@ -17,7 +17,7 @@ export default function BrandStory({
   return (
     <section className="bg-maroon-900 text-canvas" id="brand-story-section" aria-labelledby="brand-story-title">
       <div className="container-page py-16 sm:py-20 text-center max-w-3xl">
-        <img src="/images/Logo.png" alt="" className="h-14 sm:h-16 w-auto mx-auto object-contain" decoding="async" />
+        <img src="/images/logo-144.png" width={159} height={144} alt="" className="h-14 sm:h-16 w-auto mx-auto object-contain" decoding="async" />
         <h2 id="brand-story-title" className="mt-5 font-serif text-2xl sm:text-3xl tracking-[0.22em] uppercase text-canvas">
           {BOUTIQUE_CONFIG.brandName}
         </h2>

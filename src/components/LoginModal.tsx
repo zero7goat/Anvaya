@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { MOTION_TRANSITION, OVERLAY_MOTION } from "../utils/motion";
 import { BOUTIQUE_CONFIG } from "../config";
 import { FloralSprig } from "./decor/Motifs";
+import { BOX_INPUT, DomeBorder, LabelledBox } from "./AuthFormParts";
 import { X, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2, LogIn, UserPlus } from "lucide-react";
 
 interface LoginModalProps {
@@ -126,7 +127,7 @@ export default function LoginModal({
 
             {/* Brand mark */}
             <div className="flex flex-col items-center gap-2 pt-8 sm:pt-10 px-4" aria-hidden="true">
-              <img src="/images/Logo.png" alt="" className="h-11 sm:h-12 w-auto object-contain" decoding="async" />
+              <img src="/images/logo-144.png" width={159} height={144} alt="" className="h-11 sm:h-12 w-auto object-contain" decoding="async" />
               <span className="font-serif text-base tracking-[0.3em] text-ink uppercase">
                 {BOUTIQUE_CONFIG.brandName}
               </span>
@@ -286,15 +287,7 @@ export default function LoginModal({
             </motion.div>
 
             {/* Scalloped dome border along the bottom of the sign-in area */}
-            <svg className="absolute bottom-0 left-0 w-full h-9 text-maroon-700" aria-hidden="true">
-              <defs>
-                <pattern id="login-domes" width="44" height="36" patternUnits="userSpaceOnUse">
-                  <path d="M0 36 C8 36 9 26 15 21 C19 18 21 13 22 6 C23 13 25 18 29 21 C35 26 36 36 44 36 Z" fill="currentColor" />
-                  <circle cx="22" cy="4" r="2" className="fill-gold-500" />
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#login-domes)" />
-            </svg>
+            <DomeBorder patternId="login-domes" />
            </div>
 
             {footer && <div className="w-full">{footer}</div>}
@@ -304,32 +297,3 @@ export default function LoginModal({
     </AnimatePresence>
   );
 }
-
-const BOX_INPUT =
-  "w-full bg-transparent text-lg text-ink placeholder:text-muted/50 outline-none py-0.5 disabled:opacity-60";
-
-/** White input box with its label inside, above the value. */
-function LabelledBox({
-  label,
-  htmlFor,
-  action,
-  children,
-}: {
-  label: string;
-  htmlFor: string;
-  action?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-2 bg-surface border border-transparent px-5 py-2.5 transition-colors focus-within:border-maroon-700">
-      <div className="flex-1 min-w-0">
-        <label htmlFor={htmlFor} className="block text-xs text-muted">
-          {label}
-        </label>
-        {children}
-      </div>
-      {action}
-    </div>
-  );
-}
-

@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import { timingSafeEqual } from "crypto";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import { Product, Order, Review, Category, OfflineSale, Offer, AnalyticsData } from "./src/types.js";
@@ -28,7 +29,28 @@ if (geminiApiKey && geminiApiKey !== "MY_GEMINI_API_KEY" && geminiApiKey.trim() 
 }
 
 const app = express();
-app.use(express.json());
+// Small JSON bodies only: nothing this API accepts needs more
+app.use(express.json({ limit: "100kb" }));
+
+// Admin and customer-data endpoints need ADMIN_API_TOKEN, sent as
+// "Authorization: Bearer <token>". Without that variable set they stay locked, so a
+// deployment never exposes orders, customer details or catalogue edits by accident.
+// (The storefront itself does not call these endpoints; it runs on in-browser data.)
+const ADMIN_API_TOKEN = (process.env.ADMIN_API_TOKEN || "").trim();
+const requireAdmin: express.RequestHandler = (req, res, next) => {
+  const header = req.get("authorization") || "";
+  const supplied = Buffer.from(header.startsWith("Bearer ") ? header.slice(7).trim() : "");
+  const expected = Buffer.from(ADMIN_API_TOKEN);
+  if (!ADMIN_API_TOKEN || supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
+    return res.status(401).json({ error: "Not authorised." });
+  }
+  next();
+};
+
+const isPositiveInt = (value: unknown, max: number) =>
+  Number.isInteger(value) && (value as number) >= 1 && (value as number) <= max;
+const isShortText = (value: unknown, max: number) =>
+  typeof value === "string" && value.trim().length > 0 && value.length <= max;
 
 const PORT = 3000;
 const DB_FILE_PATH = path.join(process.cwd(), "db_backup.json");
@@ -366,7 +388,7 @@ Warm regards,
 app.get("/api/products", (req, res) => {
   const includeDisabled = req.query.all === "true";
   if (includeDisabled) {
-    res.json(dbState.products);
+    return requireAdmin(req, res, () => res.json(dbState.products));
   } else {
     // Only return enabled products for client storefront
     const activeProducts = dbState.products.filter(p => p.status !== "disabled");
@@ -374,7 +396,7 @@ app.get("/api/products", (req, res) => {
   }
 });
 
-app.post("/api/products", (req, res) => {
+app.post("/api/products", requireAdmin, (req, res) => {
   const { name, description, category, subcategory, price, salePrice, image, sizeStock, isFeatured, isNewArrival } = req.body;
   if (!name || !description || !category || !price || !sizeStock) {
     return res.status(400).json({ error: "Missing required product metadata" });
@@ -401,7 +423,7 @@ app.post("/api/products", (req, res) => {
   res.status(201).json({ message: "Product created successfully", product: newProduct, products: dbState.products });
 });
 
-app.put("/api/products/:id", (req, res) => {
+app.put("/api/products/:id", requireAdmin, (req, res) => {
   const { id } = req.params;
   const index = dbState.products.findIndex(p => p.id === id);
   if (index === -1) {
@@ -429,7 +451,7 @@ app.put("/api/products/:id", (req, res) => {
   res.json({ message: "Product updated successfully", product: dbState.products[index], products: dbState.products });
 });
 
-app.delete("/api/products/:id", (req, res) => {
+app.delete("/api/products/:id", requireAdmin, (req, res) => {
   const { id } = req.params;
   const filtered = dbState.products.filter(p => p.id !== id);
   if (filtered.length === dbState.products.length) {
@@ -445,7 +467,7 @@ app.get("/api/categories", (req, res) => {
   res.json(dbState.categories);
 });
 
-app.post("/api/categories", (req, res) => {
+app.post("/api/categories", requireAdmin, (req, res) => {
   const { name, subcategories } = req.body;
   if (!name) {
     return res.status(400).json({ error: "Category name is required" });
@@ -467,7 +489,7 @@ app.post("/api/categories", (req, res) => {
   res.status(201).json({ message: "Category created successfully", category: newCategory, categories: dbState.categories });
 });
 
-app.put("/api/categories/:id", (req, res) => {
+app.put("/api/categories/:id", requireAdmin, (req, res) => {
   const { id } = req.params;
   const index = dbState.categories.findIndex(c => c.id === id);
   if (index === -1) {
@@ -482,7 +504,7 @@ app.put("/api/categories/:id", (req, res) => {
   res.json({ message: "Category updated successfully", category: dbState.categories[index], categories: dbState.categories });
 });
 
-app.delete("/api/categories/:id", (req, res) => {
+app.delete("/api/categories/:id", requireAdmin, (req, res) => {
   const { id } = req.params;
   const filtered = dbState.categories.filter(c => c.id !== id);
   if (filtered.length === dbState.categories.length) {
@@ -498,7 +520,7 @@ app.post("/api/products/:id/review", async (req, res) => {
   const { id } = req.params;
   const { author, rating, comment } = req.body;
 
-  if (!author || !rating || !comment) {
+  if (!isShortText(author, 80) || !isPositiveInt(Number(rating), 5) || !isShortText(comment, 2000)) {
     return res.status(400).json({ error: "Author name, rating (1-5), and comment are required." });
   }
 
@@ -534,8 +556,13 @@ app.post("/api/products/:id/review", async (req, res) => {
 app.post("/api/checkout", async (req, res) => {
   const { items, customerName, customerPhone, customerEmail, address, city, state, pincode, paymentMethod } = req.body;
 
-  if (!items || items.length === 0 || !customerName || !customerPhone || !customerEmail || !address || !city || !state || !pincode) {
+  if (!Array.isArray(items) || items.length === 0 || items.length > 50 || !customerName || !customerPhone || !customerEmail || !address || !city || !state || !pincode) {
     return res.status(400).json({ error: "Missing vital billing or delivery credentials." });
+  }
+  for (const item of items) {
+    if (!item || typeof item.productId !== "string" || typeof item.selectedSize !== "string" || !isPositiveInt(item.quantity, 20)) {
+      return res.status(400).json({ error: "Each item needs a product, a size and a quantity from 1 to 20." });
+    }
   }
 
   // Validate quantities and lock stocks in an atomic check
@@ -614,7 +641,7 @@ app.post("/api/checkout", async (req, res) => {
 });
 
 // 5. MANUAL OFFLINE / INSTAGRAM SALE RECORDER
-app.post("/api/sales/offline", (req, res) => {
+app.post("/api/sales/offline", requireAdmin, (req, res) => {
   const { productId, size, quantity, salePrice, date } = req.body;
 
   if (!productId || !size || !quantity) {
@@ -663,16 +690,16 @@ app.post("/api/sales/offline", (req, res) => {
   });
 });
 
-app.get("/api/sales/offline", (req, res) => {
+app.get("/api/sales/offline", requireAdmin, (req, res) => {
   res.json(dbState.offlineSales);
 });
 
 // 6. ORDER SHIPMENT & STATUS MANAGEMENT
-app.get("/api/orders", (req, res) => {
+app.get("/api/orders", requireAdmin, (req, res) => {
   res.json(dbState.orders);
 });
 
-app.post("/api/orders/:id/status", async (req, res) => {
+app.post("/api/orders/:id/status", requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
@@ -722,7 +749,7 @@ app.get("/api/offers", (req, res) => {
   res.json(dbState.offers);
 });
 
-app.post("/api/offers", (req, res) => {
+app.post("/api/offers", requireAdmin, (req, res) => {
   const { title, code, discountValue, type, minSpend, enabled } = req.body;
   if (!title || !code || !discountValue || !type) {
     return res.status(400).json({ error: "Missing required offer fields" });
@@ -743,7 +770,7 @@ app.post("/api/offers", (req, res) => {
   res.status(201).json({ message: "Offer created successfully", offer: newOffer, offers: dbState.offers });
 });
 
-app.put("/api/offers/:id", (req, res) => {
+app.put("/api/offers/:id", requireAdmin, (req, res) => {
   const { id } = req.params;
   const index = dbState.offers.findIndex(o => o.id === id);
   if (index === -1) {
@@ -765,7 +792,7 @@ app.put("/api/offers/:id", (req, res) => {
   res.json({ message: "Offer updated successfully", offer: dbState.offers[index], offers: dbState.offers });
 });
 
-app.delete("/api/offers/:id", (req, res) => {
+app.delete("/api/offers/:id", requireAdmin, (req, res) => {
   const { id } = req.params;
   const filtered = dbState.offers.filter(o => o.id !== id);
   if (filtered.length === dbState.offers.length) {
@@ -777,7 +804,7 @@ app.delete("/api/offers/:id", (req, res) => {
 });
 
 // 8. REAL-TIME RESTOCK WAREHOUSE ENDPOINT
-app.post("/api/inventory/restock", (req, res) => {
+app.post("/api/inventory/restock", requireAdmin, (req, res) => {
   const { productId, size, quantity } = req.body;
   if (!productId || !size || !quantity) {
     return res.status(400).json({ error: "Product ID, size, and quantity are required." });
@@ -800,7 +827,7 @@ app.post("/api/inventory/restock", (req, res) => {
 });
 
 // 9. WEB ANALYTICS & TRAFFIC TRACKER
-app.get("/api/analytics", (req, res) => {
+app.get("/api/analytics", requireAdmin, (req, res) => {
   res.json(dbState.analytics);
 });
 
@@ -826,7 +853,7 @@ app.post("/api/analytics/track", (req, res) => {
   }
 
   saveDB(dbState);
-  res.json({ success: true, analytics: dbState.analytics });
+  res.json({ success: true });
 });
 
 // Serve static files from images directory

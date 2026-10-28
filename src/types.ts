@@ -21,7 +21,7 @@ export interface Product {
   salePrice?: number; // Discounted promotional price (optional)
   image: string;
   additionalImages?: string[]; // Image gallery
-  sizeStock: Record<string, number>; // Individual stock per size, e.g. {"S": 3, "M": 5, "L": 2, "XL": 4}
+  sizeStock: Record<string, number>; // Individual stock per size: kurtas {"S": 3, ..., "XXL": 0}, sarees {"Free Size": 6}
   reviews: Review[];
   isFeatured: boolean;
   isNewArrival: boolean;
@@ -60,6 +60,11 @@ export interface Order {
   city: string;
   state: string;
   pincode: string;
+  // Price breakdown (orders placed through checkout record these; older samples may not)
+  subtotal?: number;
+  discount?: number;
+  couponCode?: string;
+  shippingCost?: number;
   total: number;
   date: string; // YYYY-MM-DD
   time: string; // HH:MM

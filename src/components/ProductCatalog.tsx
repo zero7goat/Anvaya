@@ -2,6 +2,7 @@ import React, { Fragment, useState, useMemo } from "react";
 import { Star, Filter, SlidersHorizontal, Search } from "lucide-react";
 import { Product } from "../types";
 import ProductCard from "./ProductCard";
+import { ALL_SIZES } from "../utils/sizes";
 
 interface ProductCatalogProps {
   products: Product[];
@@ -185,24 +186,23 @@ export default function ProductCatalog({
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
           {/* Size Filter */}
           <div className="flex items-center gap-2 text-xs">
-            <span className="field-label mb-0">Size</span>
-            <select
+            <label htmlFor="catalog-size-filter" className="field-label mb-0">Size</label>
+            <select id="catalog-size-filter"
               value={selectedSize}
               onChange={(e) => setSelectedSize(e.target.value)}
               className="field field-sm w-auto"
             >
               <option value="All">All Sizes</option>
-              <option value="S">S</option>
-              <option value="M">M</option>
-              <option value="L">L</option>
-              <option value="XL">XL</option>
+              {ALL_SIZES.map((size) => (
+                <option key={size} value={size}>{size}</option>
+              ))}
             </select>
           </div>
 
           {/* Price Range */}
           <div className="flex items-center gap-2 text-xs">
-            <span className="field-label mb-0">Price</span>
-            <select
+            <label htmlFor="catalog-price-filter" className="field-label mb-0">Price</label>
+            <select id="catalog-price-filter"
               value={priceRange}
               onChange={(e) => setPriceRange(e.target.value)}
               className="field field-sm w-auto"
@@ -226,7 +226,7 @@ export default function ProductCatalog({
           </label>
 
           {/* Sort By */}
-          <select
+          <select aria-label="Sort pieces"
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
             className="field field-sm w-auto ml-auto md:ml-0"

@@ -4,7 +4,7 @@ import { Product, CollectionType } from "../types";
 import { BOUTIQUE_CONFIG } from "../config";
 import { productService } from "../services/productService";
 import ProductCard from "./ProductCard";
-import { CLOTHING_SIZES } from "../utils/productDisplay";
+import { getSizeOptionsFor } from "../utils/productDisplay";
 import { BackgroundMotif } from "./decor/Motifs";
 
 interface CollectionPageProps {
@@ -55,8 +55,9 @@ export default function CollectionPage({
     }
   }, [collectionKey]);
 
-  // Size filter options (the same for both collections)
-  const availableSizes = ["All", ...CLOTHING_SIZES];
+  // Size filter options: kurtas come in S to XXL. Sarees are Free Size, so they get no size filter.
+  const availableSizes = ["All", ...getSizeOptionsFor(collectionKey === "ayanaa" ? "Sarees" : "Kurtas")];
+  const showSizeFilter = collectionKey !== "ayanaa";
 
   // Query products strictly for this collection
   const products = useMemo(() => {
@@ -115,20 +116,22 @@ export default function CollectionPage({
         />
       </div>
 
-      <FilterSection title="Size">
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Size">
-          {availableSizes.map((sz) => (
-            <button
-              key={sz}
-              onClick={() => setSelectedSize(sz)}
-              aria-pressed={selectedSize === sz}
-              className="chip min-w-10 justify-center"
-            >
-              {sz}
-            </button>
-          ))}
-        </div>
-      </FilterSection>
+      {showSizeFilter && (
+        <FilterSection title="Size">
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Size">
+            {availableSizes.map((sz) => (
+              <button
+                key={sz}
+                onClick={() => setSelectedSize(sz)}
+                aria-pressed={selectedSize === sz}
+                className="chip min-w-10 justify-center"
+              >
+                {sz}
+              </button>
+            ))}
+          </div>
+        </FilterSection>
+      )}
 
       <FilterSection title="Availability">
         <label className="flex items-center gap-2 text-xs text-ink-soft cursor-pointer select-none">
@@ -183,7 +186,7 @@ export default function CollectionPage({
       </div>
 
       {/* Collection heading: name, with "By Anvaya" directly beneath */}
-      <header className="relative isolate container-page pt-8 pb-6 sm:pt-10 sm:pb-8">
+      <header className="relative isolate overflow-hidden container-page pt-8 pb-6 sm:pt-10 sm:pb-8">
         <BackgroundMotif kind="paisley" className="right-2 md:right-6 lg:right-16 top-2 md:top-4 w-16 h-28 md:w-28 md:h-44 rotate-[20deg]" />
         <BackgroundMotif kind="mandala" className="right-20 md:right-40 lg:right-52 top-4 md:top-10 w-14 h-14 md:w-24 md:h-24" />
         <h1 className="heading-title sm:text-4xl">{collectionInfo.name}</h1>

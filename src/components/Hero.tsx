@@ -12,7 +12,7 @@ import ShopByStyle from "./home/ShopByStyle";
 import CustomerReviews from "./home/CustomerReviews";
 import BrandStory from "./home/BrandStory";
 import { SITE_IMAGES, HeroSlide } from "../data/imageRegistry";
-import { IMAGE_WIDTHS, responsiveImage } from "../utils/imageSources";
+import { IMAGE_WIDTHS, imageAtWidth, responsiveImage } from "../utils/imageSources";
 import { BackgroundMotif } from "./decor/Motifs";
 import MobileHero from "./home/MobileHero";
 import { useIsMobile } from "../hooks/useIsMobile";
@@ -390,6 +390,28 @@ export default function Hero({
  */
 function ArchCover({ src, clipId }: { src: string; clipId: string }) {
   const [failed, setFailed] = useState(false);
+  // SVG images cannot lazy-load, so the cover is only requested once it nears the screen
+  const sentinelRef = useRef<SVGRectElement>(null);
+  const [near, setNear] = useState(false);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || near) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setNear(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setNear(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "400px 0px" }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [near]);
   if (!src || failed) {
     return (
       <text
@@ -406,13 +428,18 @@ function ArchCover({ src, clipId }: { src: string; clipId: string }) {
     );
   }
   return (
-    <image
-      href={src}
-      width="300"
-      height="400"
-      preserveAspectRatio="xMidYMid slice"
-      clipPath={"url(#" + clipId + ")"}
-      onError={() => setFailed(true)}
-    />
+    <>
+      <rect ref={sentinelRef} width="300" height="400" fill="none" />
+      {near && (
+        <image
+          href={imageAtWidth(src, 600)}
+          width="300"
+          height="400"
+          preserveAspectRatio="xMidYMid slice"
+          clipPath={"url(#" + clipId + ")"}
+          onError={() => setFailed(true)}
+        />
+      )}
+    </>
   );
 }

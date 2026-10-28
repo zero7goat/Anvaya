@@ -11,8 +11,10 @@ import { orderService } from "../services/orderService";
 import { authService, AdminUser } from "../services/authService";
 import { BOUTIQUE_CONFIG } from "../config";
 import ProductImage from "./ProductImage";
+import { FloralSprig } from "./decor/Motifs";
+import { BOX_INPUT, DomeBorder, LabelledBox } from "./AuthFormParts";
 import { getProductImage } from "../data/imageRegistry";
-import { CLOTHING_SIZES, getSizeOptions } from "../utils/productDisplay";
+import { ALL_SIZES, FREE_SIZE, describeSize, getSizeOptions, getSizeOptionsFor } from "../utils/productDisplay";
 
 interface AdminDashboardProps {
   onReturnToStore: () => void;
@@ -62,7 +64,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
     isFeatured: false,
     isNewArrival: true,
     status: "enabled" as "enabled" | "disabled",
-    sizeStock: { "S": 4, "M": 6, "L": 6, "XL": 2 }
+    sizeStock: { "S": 4, "M": 6, "L": 6, "XL": 2, "XXL": 0 } as Record<string, number>
   });
   const [formError, setFormError] = useState("");
 
@@ -199,7 +201,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
       isFeatured: false,
       isNewArrival: true,
       status: "enabled",
-      sizeStock: { "S": 4, "M": 6, "L": 4, "XL": 2 }
+      sizeStock: { "S": 4, "M": 6, "L": 4, "XL": 2, "XXL": 0 }
     });
     setFormError("");
     setIsProductModalOpen(true);
@@ -220,12 +222,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
       isFeatured: !!product.isFeatured,
       isNewArrival: !!product.isNewArrival,
       status: product.status,
-      sizeStock: {
-        "S": product.sizeStock?.["S"] ?? 0,
-        "M": product.sizeStock?.["M"] ?? 0,
-        "L": product.sizeStock?.["L"] ?? 0,
-        "XL": product.sizeStock?.["XL"] ?? 0,
-      }
+      sizeStock: Object.fromEntries(ALL_SIZES.map((sz) => [sz, product.sizeStock?.[sz] ?? 0]))
     });
     setFormError("");
     setIsProductModalOpen(true);
@@ -252,10 +249,10 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
     // Collection correlates to category
     const targetCollection: CollectionType = formData.category === "Sarees" ? "ayanaa" : "alankritha";
 
-    // Every product is stocked in S to XL
+    // Kurtas are stocked in S to XXL, sarees as Free Size
     const cleanStock: Record<string, number> = {};
-    CLOTHING_SIZES.forEach(sz => {
-      cleanStock[sz] = Math.max(0, Number(formData.sizeStock[sz as keyof typeof formData.sizeStock]) || 0);
+    getSizeOptionsFor(formData.category).forEach(sz => {
+      cleanStock[sz] = Math.max(0, Number(formData.sizeStock[sz]) || 0);
     });
 
     if (editingProduct) {
@@ -326,119 +323,131 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
   };
 
   // =========================================================================
-  // VIEW 1: ADMIN LOGIN SCREEN (Clean sans-serif design system)
+  // VIEW 1: ADMIN LOGIN SCREEN (same look as the customer sign-in page)
   // =========================================================================
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-canvas flex flex-col justify-center items-center p-4 font-sans text-ink">
-        <div className="dialog-panel w-full max-w-md bg-surface overflow-hidden">
-          
-          {/* Header Banner */}
-          <div className="bg-maroon-950 text-white p-6 sm:p-8 text-center relative">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-white/10 mb-3 text-gold-300">
-              <ShieldCheck className="w-6 h-6" />
-            </div>
-            <h1 className="font-serif text-2xl tracking-[0.12em] uppercase text-white mb-1">
-              ANVAYA
-            </h1>
-            <p className="eyebrow text-gold-300">
-              Boutique Administration Portal
-            </p>
+      <div className="min-h-[100svh] bg-canvas font-sans text-ink">
+        <div className="relative isolate overflow-hidden w-full min-h-[100svh] flex flex-col items-center">
+          {/* Floral sprigs at the page edges (decorative; smaller and fainter on phones) */}
+          <FloralSprig className="absolute -z-10 left-0 top-28 md:top-1/2 md:-translate-y-1/2 h-48 md:h-[26rem] lg:h-[30rem] w-auto text-line-strong opacity-50 md:opacity-100" />
+          <FloralSprig className="absolute -z-10 right-0 bottom-20 md:bottom-auto md:top-1/2 md:-translate-y-1/2 h-48 md:h-[26rem] lg:h-[30rem] w-auto text-line-strong -scale-x-100 opacity-50 md:opacity-100" />
+
+          {/* Brand mark */}
+          <div className="flex flex-col items-center gap-2 pt-8 sm:pt-10 px-4">
+            <img src="/images/logo-144.png" width={159} height={144} alt="" className="h-11 sm:h-12 w-auto object-contain" decoding="async" />
+            <span className="font-serif text-base tracking-[0.3em] text-ink uppercase">{BOUTIQUE_CONFIG.brandName}</span>
+            <span className="eyebrow text-maroon-700">Admin</span>
           </div>
 
-          {/* Prototype Notice */}
-          <div className="status-note status-note-warning rounded-none border-x-0 border-t-0 px-5 py-3 items-start leading-relaxed">
-            <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
-            <div>
-              <strong>Frontend Demo Preview:</strong> Real authentication will be connected server-side via Cloudflare Workers. For testing now, use Quick Demo Access below.
-            </div>
-          </div>
+          {/* Form column, vertically centred in the remaining space */}
+          <div className="relative w-full max-w-[450px] flex-1 flex flex-col justify-center px-4 pt-8 sm:pt-10 pb-20">
+            <h1 className="font-serif text-[1.75rem] sm:text-[2rem] text-ink text-center">Admin Sign In</h1>
+            <p className="text-base text-ink/85 mt-3 text-center">Enter your admin email and password</p>
 
-          {/* Login Form */}
-          <form onSubmit={handleLogin} className="p-6 sm:p-8 space-y-4">
-            {loginError && (
-              <div className="status-note status-note-danger" role="alert">
-                <AlertTriangle className="w-4 h-4 shrink-0 text-danger" />
-                <span>{loginError}</span>
-              </div>
-            )}
+            <form onSubmit={handleLogin} className="mt-7 space-y-3" id="admin-login-form">
+              {loginError && (
+                <div className="status-note status-note-danger" role="alert">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-danger" />
+                  <span>{loginError}</span>
+                </div>
+              )}
 
-            <div>
-              <label className="field-label">
-                Admin Email Address
-              </label>
-              <input
-                type="email"
-                required
-                placeholder="owner@anvaya.com"
-                value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
-                className="field"
-              />
-            </div>
-
-            <div>
-              <label className="field-label">
-                Password
-              </label>
-              <div className="relative">
+              <LabelledBox label="Admin Email Address" htmlFor="admin-email-input">
                 <input
+                  id="admin-email-input"
+                  type="email"
+                  required
+                  autoComplete="username"
+                  inputMode="email"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  placeholder="owner@anvaya.com"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  className={BOX_INPUT}
+                  disabled={loginLoading}
+                />
+              </LabelledBox>
+
+              <LabelledBox
+                label="Password"
+                htmlFor="admin-password-input"
+                action={
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                    aria-controls="admin-password-input"
+                    className="btn-icon btn-icon-sm rounded-xs"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                }
+              >
+                <input
+                  id="admin-password-input"
                   type={showPassword ? "text" : "password"}
                   required
-                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  placeholder="Enter password"
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
-                  className="field pr-10"
+                  className={BOX_INPUT}
+                  disabled={loginLoading}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-ink transition-colors p-0.5 cursor-pointer"
-                  title={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
+              </LabelledBox>
 
+              <button
+                type="submit"
+                disabled={loginLoading}
+                aria-busy={loginLoading}
+                className="w-full !mt-4 h-14 sm:h-16 flex items-center justify-center gap-2 bg-maroon-600 text-white text-base font-semibold uppercase tracking-[0.12em] transition-colors hover:bg-maroon-700 disabled:opacity-70 cursor-pointer disabled:cursor-default"
+              >
+                {loginLoading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" />
+                    <span>Verifying...</span>
+                  </>
+                ) : (
+                  <span>Sign In</span>
+                )}
+              </button>
+            </form>
+
+            {/* Prototype notice */}
+            <p className="mt-4 text-center text-sm font-semibold text-ink/70">
+              Demo preview: real admin sign-in is not connected yet. Use Quick Demo Access to look around.
+            </p>
+
+            {/* Demo access, styled like the customer page's switch button */}
+            <div className="flex items-center gap-4 mt-9 mb-4 sm:-mx-5 text-sm uppercase tracking-[0.14em] text-muted" aria-hidden="true">
+              <span className="h-px flex-1 bg-line-strong" />
+              Just testing?
+              <span className="h-px flex-1 bg-line-strong" />
+            </div>
             <button
-              type="submit"
-              disabled={loginLoading}
-              className="btn btn-primary btn-lg btn-block"
+              type="button"
+              onClick={handleQuickDemoAccess}
+              className="w-full h-[56px] sm:h-[60px] flex items-center justify-center gap-3 border border-line-strong bg-surface text-ink text-base transition-colors hover:bg-surface-muted hover:border-ink cursor-pointer"
             >
-              {loginLoading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Verifying...</span>
-                </>
-              ) : (
-                <span>Sign In to Dashboard</span>
-              )}
+              <ShieldCheck className="w-4 h-4" aria-hidden="true" />
+              Quick Demo Access
             </button>
 
-            {/* Quick Demo Access Button */}
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={handleQuickDemoAccess}
-                className="btn btn-secondary btn-block"
-              >
-                Quick Demo Access (Pre-filled Owner)
-              </button>
-            </div>
-          </form>
-
-          {/* Footer Back to Store Link */}
-          <div className="p-4 bg-canvas border-t border-line text-center">
             <button
+              type="button"
               onClick={onReturnToStore}
-              className="inline-flex items-center text-xs font-medium text-muted hover:text-ink transition-colors cursor-pointer group"
+              className="mt-6 mx-auto inline-flex items-center text-sm font-medium text-muted hover:text-ink transition-colors cursor-pointer group"
             >
               <ArrowLeft className="w-3.5 h-3.5 mr-1.5 transition-transform group-hover:-translate-x-1" />
-              <span>Return to Customer Storefront</span>
+              <span>Back to store</span>
             </button>
           </div>
 
+          {/* Scalloped dome border along the bottom of the sign-in area */}
+          <DomeBorder patternId="admin-login-domes" />
         </div>
       </div>
     );
@@ -458,7 +467,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
             {/* Brand Title */}
             <div className="flex items-center space-x-3">
               <img
-                src="/images/Logo.png"
+                src="/images/logo-144.png" width={159} height={144}
                 alt="ANVAYA emblem"
                 className="h-8 w-auto object-contain shrink-0"
                 decoding="async"
@@ -791,7 +800,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
             {/* Products Table */}
             <div className="panel overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="ds-table">
+                <table className="ds-table ds-table-stack">
                   <thead>
                     <tr>
                       <th className="py-3 px-4">Product</th>
@@ -810,7 +819,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                       return (
                         <tr key={p.id}>
                           {/* Image & Title */}
-                          <td className="py-3 px-4">
+                          <td data-label="" className="py-3 px-4">
                             <div className="flex items-center space-x-3">
                               <ProductImage src={getProductImage(p)} alt={p.name} className="w-12 h-14 object-cover shrink-0" compact />
                               <div className="max-w-xs">
@@ -825,7 +834,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                           </td>
 
                           {/* Collection / Type */}
-                          <td className="py-3 px-4">
+                          <td data-label="Collection / Type" className="py-3 px-4">
                             <div className="font-medium text-neutral-800">
                               {p.collection === "alankritha" ? "Alankritha" : "Ayanaa"}
                             </div>
@@ -835,7 +844,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                           </td>
 
                           {/* Price */}
-                          <td className="py-3 px-4">
+                          <td data-label="Retail Price" className="py-3 px-4">
                             <div className="font-semibold text-neutral-900 tabular-nums">
                               ₹{(p.salePrice || p.price).toLocaleString("en-IN")}
                             </div>
@@ -847,7 +856,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                           </td>
 
                           {/* Sizes & Stock */}
-                          <td className="py-3 px-4">
+                          <td data-label="Sizes & Stock" className="py-3 px-4">
                             <div className="flex items-center space-x-1.5">
                               <span className={`w-2 h-2 rounded-full ${totalStock > 0 ? "bg-success" : "bg-danger"}`} />
                               <span className="font-semibold text-neutral-800 tabular-nums">
@@ -860,7 +869,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                           </td>
 
                           {/* Published Status Toggle */}
-                          <td className="py-3 px-4">
+                          <td data-label="Status" className="py-3 px-4">
                             <button
                               onClick={() => handleToggleStatus(p.id)}
                               className={`badge cursor-pointer transition-colors ${
@@ -872,7 +881,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                           </td>
 
                           {/* Actions */}
-                          <td className="py-3 px-4 text-right">
+                          <td data-label="Actions" className="py-3 px-4 text-right">
                             <div className="flex items-center justify-end space-x-2">
                               <button
                                 onClick={() => handleOpenEditModal(p)}
@@ -917,7 +926,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
 
             <div className="panel overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="ds-table">
+                <table className="ds-table ds-table-stack">
                   <thead>
                     <tr>
                       <th className="py-3 px-4">Product</th>
@@ -932,7 +941,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                       const total = productService.getTotalStock(p);
                       return (
                         <tr key={p.id}>
-                          <td className="py-3 px-4">
+                          <td data-label="" className="py-3 px-4">
                             <div className="font-semibold text-neutral-900 line-clamp-1">
                               {p.name}
                             </div>
@@ -940,12 +949,12 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                               {p.id}
                             </div>
                           </td>
-                          <td className="py-3 px-4">
+                          <td data-label="Collection" className="py-3 px-4">
                             <span className="text-xs text-neutral-700 font-medium">
                               {p.collection === "alankritha" ? "Alankritha (Kurtas)" : "Ayanaa (Sarees)"}
                             </span>
                           </td>
-                          <td className="py-3 px-4">
+                          <td data-label="Size Counts (Editable)" className="ds-cell-block py-3 px-4">
                             <div className="flex flex-wrap items-center gap-2">
                               {getSizeOptions(p).map((size) => (
                                 <div key={size} className="flex items-center space-x-1 panel-muted px-2 py-1">
@@ -955,18 +964,19 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                                     min="0"
                                     value={p.sizeStock?.[size] ?? 0}
                                     onChange={(e) => handleQuickStockChange(p.id, size, parseInt(e.target.value) || 0)}
-                                    className="w-12 text-center text-xs bg-white border border-neutral-300 rounded-xs px-1 py-0.5 focus:outline-none focus:border-neutral-800"
+                                    aria-label={`Stock for ${describeSize(size)}`}
+                                    className="w-12 text-center text-xs bg-white border border-neutral-300 rounded-xs px-1 py-1.5 sm:py-0.5 focus:outline-none focus:border-neutral-800"
                                   />
                                 </div>
                               ))}
                             </div>
                           </td>
-                          <td className="py-3 px-4">
+                          <td data-label="Total Stock" className="py-3 px-4">
                             <span className={`font-bold tabular-nums ${total > 0 ? "text-success" : "text-danger"}`}>
                               {total} units
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-right">
+                          <td data-label="Quick Restock" className="py-3 px-4 text-right">
                             <div className="flex items-center justify-end space-x-2">
                               <button
                                 onClick={() => {
@@ -1030,7 +1040,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
 
             <div className="panel overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="ds-table">
+                <table className="ds-table ds-table-stack">
                   <thead>
                     <tr>
                       <th className="py-3 px-4">Order ID & Date</th>
@@ -1045,26 +1055,26 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                   <tbody className="divide-y divide-line">
                     {filteredOrders.map((o) => (
                       <tr key={o.id}>
-                        <td className="py-3 px-4">
+                        <td data-label="" className="py-3 px-4">
                           <div className="tabular-nums font-bold text-neutral-900">{o.id}</div>
                           <div className="text-neutral-400 text-xs">{o.date} {o.time}</div>
                         </td>
-                        <td className="py-3 px-4">
+                        <td data-label="Customer" className="py-3 px-4">
                           <div className="font-semibold text-neutral-800">{o.customerName}</div>
                           <div className="text-neutral-500 text-xs">{o.customerPhone}</div>
                         </td>
-                        <td className="py-3 px-4 text-neutral-600">
+                        <td data-label="Destination" className="py-3 px-4 text-neutral-600">
                           {o.city}, {o.state} ({o.pincode})
                         </td>
-                        <td className="py-3 px-4">
+                        <td data-label="Items" className="py-3 px-4">
                           <span className="font-semibold text-neutral-800">
                             {o.items.reduce((s, i) => s + i.quantity, 0)} items
                           </span>
                         </td>
-                        <td className="py-3 px-4 font-semibold text-neutral-900 tabular-nums">
+                        <td data-label="Total" className="py-3 px-4 font-semibold text-neutral-900 tabular-nums">
                           ₹{o.total.toLocaleString("en-IN")}
                         </td>
-                        <td className="py-3 px-4">
+                        <td data-label="Status" className="py-3 px-4">
                           <select
                             value={o.status}
                             onChange={(e) => handleChangeOrderStatus(o.id, e.target.value as any)}
@@ -1077,7 +1087,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                             <option value="Cancelled">Cancelled</option>
                           </select>
                         </td>
-                        <td className="py-3 px-4 text-right">
+                        <td data-label="Details" className="py-3 px-4 text-right">
                           <button
                             onClick={() => setSelectedOrder(o)}
                             className="btn btn-secondary btn-sm"
@@ -1277,14 +1287,14 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                 <label className="field-label">
                   Available Size Inventory Units
                 </label>
-                <div className="grid grid-cols-4 gap-3">
-                  {CLOTHING_SIZES.map(sz => (
+                <div className={`grid gap-2 sm:gap-3 ${formData.category === "Sarees" ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-3 min-[400px]:grid-cols-5"}`}>
+                  {getSizeOptionsFor(formData.category).map(sz => (
                     <div key={sz} className="text-center">
-                      <span className="field-label text-center">Size {sz}</span>
+                      <span className="field-label text-center">{sz === FREE_SIZE ? sz : `Size ${sz}`}</span>
                       <input
                         type="number"
                         min="0"
-                        value={formData.sizeStock[sz]}
+                        value={formData.sizeStock[sz] ?? 0}
                         onChange={(e) => setFormData({
                           ...formData,
                           sizeStock: { ...formData.sizeStock, [sz]: parseInt(e.target.value) || 0 }

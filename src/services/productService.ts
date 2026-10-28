@@ -1,4 +1,5 @@
 import { Product, CollectionType, Review } from "../types";
+import { getSizeOptionsFor } from "../utils/sizes";
 
 /**
  * SAMPLE PRODUCT CATALOGUE FOR ANVAYA
@@ -20,7 +21,7 @@ export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
     // Supplied kurta image 10 (aqua print), closest match to Turquoise
     image: "https://www.rangriti.com/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-rangriti-product-catalog/default/dw45884c06/images/ss26/rrtroz26228ss26aqa_1.jpg?sw=900&sh=1350&q=100&strip=false",
     additionalImages: [],
-    sizeStock: { "S": 4, "M": 6, "L": 8, "XL": 2 },
+    sizeStock: { "S": 4, "M": 6, "L": 8, "XL": 2, "XXL": 0 },
     reviews: [
       {
         id: "rev-01",
@@ -50,7 +51,7 @@ export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
     // Supplied kurta image 8 (rust)
     image: "https://www.rangriti.com/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-rangriti-product-catalog/default/dwa0a99ed8/images/ss26/ertnmoz22535ss26rus_1.jpg?sw=900&sh=1350&q=100&strip=false",
     additionalImages: [],
-    sizeStock: { "S": 3, "M": 5, "L": 0, "XL": 2 }, // Size L out of stock
+    sizeStock: { "S": 3, "M": 5, "L": 0, "XL": 2, "XXL": 0 }, // Size L out of stock
     reviews: [],
     isFeatured: true,
     isNewArrival: false,
@@ -70,7 +71,7 @@ export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
     // Supplied kurta image 6 (red embroidered)
     image: "https://www.rangriti.com/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-rangriti-product-catalog/default/dw96a3de73/images/aw26/fstgm25559aw26red_1.jpg?sw=900&sh=1350&q=100&strip=false",
     additionalImages: [],
-    sizeStock: { "S": 2, "M": 3, "L": 4, "XL": 1 },
+    sizeStock: { "S": 2, "M": 3, "L": 4, "XL": 1, "XXL": 0 },
     reviews: [],
     isFeatured: true,
     isNewArrival: true,
@@ -89,7 +90,7 @@ export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
     salePrice: 2079,
     // Supplied kurta image 3 (green print)
     image: "https://www.rangriti.com/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-rangriti-product-catalog/default/dw429fd652/images/aw26/wnt22718aw26grn_1.jpg?sw=900&sh=1350&q=100&strip=false",
-    sizeStock: { "S": 5, "M": 7, "L": 4, "XL": 3 },
+    sizeStock: { "S": 5, "M": 7, "L": 4, "XL": 3, "XXL": 0 },
     reviews: [],
     isFeatured: true,
     isNewArrival: true,
@@ -108,7 +109,7 @@ export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
     salePrice: 7499,
     // Supplied saree image 4 (maroon Banarasi)
     image: "https://cdn.shopify.com/s/files/1/0049/3649/9315/products/koskii-maroon-zariwork-banarasi-designer-saree-saus0018941_maroon_6_800x800.jpg?v=1748424817&width=480",
-    sizeStock: { "S": 2, "M": 2, "L": 2, "XL": 2 },
+    sizeStock: { "Free Size": 8 },
     reviews: [
       {
         id: "rev-02",
@@ -137,7 +138,7 @@ export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
     salePrice: 3999,
     // Supplied saree image (onion pink tissue): closest sheer pastel drape; not sage green
     image: "https://cdn.shopify.com/s/files/1/0049/3649/9315/files/koskii-onionpink-zariwork-tissue-designer-saree-saus0038515_onionpink_1_1_800x800.jpg?v=1767951906&width=480",
-    sizeStock: { "S": 1, "M": 1, "L": 1, "XL": 1 },
+    sizeStock: { "Free Size": 4 },
     reviews: [],
     isFeatured: false,
     isNewArrival: true,
@@ -156,7 +157,7 @@ export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
     salePrice: 3499,
     // Supplied kurta image (rust and maroon print): closest warm tone; no mustard kurta was supplied
     image: "https://www.rangriti.com/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-rangriti-product-catalog/default/dw231372d9/images/aw26/fstgm26325aw26org_1.jpg?sw=900&sh=1350&q=100&strip=false",
-    sizeStock: { "S": 4, "M": 6, "L": 3, "XL": 2 },
+    sizeStock: { "S": 4, "M": 6, "L": 3, "XL": 2, "XXL": 0 },
     reviews: [],
     isFeatured: true,
     isNewArrival: true,
@@ -175,7 +176,7 @@ export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
     salePrice: 5999,
     // Supplied saree image (copper zari silk): closest woven zari drape; not indigo
     image: "https://cdn.shopify.com/s/files/1/0049/3649/9315/files/koskii-copper-zariwork-softsilk-designer-saree-saus0039230_copper_1_6_800x800.jpg?v=1748424967&width=480",
-    sizeStock: { "S": 1, "M": 2, "L": 1, "XL": 1 },
+    sizeStock: { "Free Size": 5 },
     reviews: [],
     isFeatured: true,
     isNewArrival: true,
@@ -195,7 +196,7 @@ export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
     price: 5499,
     salePrice: 4399,
     image: "https://www.rangriti.com/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-rangriti-product-catalog/default/dwa57d0d53/images/aw26/fstgm25514aw26red_1.jpg?sw=900&sh=1350&q=100&strip=false",
-    sizeStock: { "S": 3, "M": 4, "L": 3, "XL": 2 },
+    sizeStock: { "S": 3, "M": 4, "L": 3, "XL": 2, "XXL": 0 },
     reviews: [],
     isFeatured: true,
     isNewArrival: true,
@@ -213,7 +214,7 @@ export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
     price: 2299,
     salePrice: 1839,
     image: "https://www.rangriti.com/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-rangriti-product-catalog/default/dw88c7fe02/images/ss26/ind22529ss26blu_1.jpg?sw=900&sh=1350&q=100&strip=false",
-    sizeStock: { "S": 5, "M": 6, "L": 4, "XL": 3 },
+    sizeStock: { "S": 5, "M": 6, "L": 4, "XL": 3, "XXL": 0 },
     reviews: [],
     isFeatured: false,
     isNewArrival: true,
@@ -231,7 +232,7 @@ export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
     price: 3299,
     salePrice: 2639,
     image: "https://www.rangriti.com/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-rangriti-product-catalog/default/dw86f6e1d2/images/aw26/fstgm28068aw26pnk_1.jpg?sw=900&sh=1350&q=100&strip=false",
-    sizeStock: { "S": 4, "M": 5, "L": 4, "XL": 2 },
+    sizeStock: { "S": 4, "M": 5, "L": 4, "XL": 2, "XXL": 0 },
     reviews: [],
     isFeatured: false,
     isNewArrival: true,
@@ -249,7 +250,7 @@ export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
     price: 4699,
     salePrice: 3759,
     image: "https://www.rangriti.com/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-rangriti-product-catalog/default/dw2b492855/images/aw26/fstgm25476aw26fus_1.jpg?sw=900&sh=1350&q=100&strip=false",
-    sizeStock: { "S": 3, "M": 4, "L": 3, "XL": 2 },
+    sizeStock: { "S": 3, "M": 4, "L": 3, "XL": 2, "XXL": 0 },
     reviews: [],
     isFeatured: true,
     isNewArrival: true,
@@ -267,7 +268,7 @@ export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
     price: 2999,
     salePrice: 2399,
     image: "https://www.rangriti.com/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-rangriti-product-catalog/default/dw05005b15/images/aw26/rrtroz28080aw26blu_1.jpg?sw=900&sh=1350&q=100&strip=false",
-    sizeStock: { "S": 4, "M": 6, "L": 5, "XL": 3 },
+    sizeStock: { "S": 4, "M": 6, "L": 5, "XL": 3, "XXL": 0 },
     reviews: [],
     isFeatured: false,
     isNewArrival: true,
@@ -285,7 +286,7 @@ export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
     price: 4499,
     salePrice: 3599,
     image: "https://cdn.shopify.com/s/files/1/0049/3649/9315/files/SAUS0050080_PINK__1_800x800.jpg?v=1781788984&width=480",
-    sizeStock: { "S": 1, "M": 2, "L": 1, "XL": 1 },
+    sizeStock: { "Free Size": 5 },
     reviews: [],
     isFeatured: true,
     isNewArrival: true,
@@ -303,7 +304,7 @@ export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
     price: 4499,
     salePrice: 3599,
     image: "https://cdn.shopify.com/s/files/1/0049/3649/9315/files/SAUS0050082_PURPLE__1_800x800.jpg?v=1781788863&width=480",
-    sizeStock: { "S": 1, "M": 1, "L": 1, "XL": 1 },
+    sizeStock: { "Free Size": 4 },
     reviews: [],
     isFeatured: false,
     isNewArrival: true,
@@ -321,7 +322,7 @@ export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
     price: 4499,
     salePrice: 3599,
     image: "https://cdn.shopify.com/s/files/1/0049/3649/9315/files/SAUS0050082_ORANGE__1_800x800.jpg?v=1781788701&width=480",
-    sizeStock: { "S": 1, "M": 1, "L": 1, "XL": 1 },
+    sizeStock: { "Free Size": 4 },
     reviews: [],
     isFeatured: false,
     isNewArrival: true,
@@ -339,7 +340,7 @@ export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
     price: 5999,
     salePrice: 4799,
     image: "https://cdn.shopify.com/s/files/1/0049/3649/9315/files/koskii-mustard-printed-silk-designer-saree-saus0042393_mustard_rani_pink_1_4_800x800.jpg?v=1748425141&width=480",
-    sizeStock: { "S": 1, "M": 1, "L": 1, "XL": 1 },
+    sizeStock: { "Free Size": 4 },
     reviews: [],
     isFeatured: true,
     isNewArrival: true,
@@ -357,7 +358,7 @@ export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
     price: 6499,
     salePrice: 5199,
     image: "https://cdn.shopify.com/s/files/1/0049/3649/9315/files/koskii-maroon-zariwork-softsilk-designer-saree-saus0040043_rani_pink_1_2_800x800.jpg?v=1770705548&width=480",
-    sizeStock: { "S": 0, "M": 1, "L": 1, "XL": 1 },
+    sizeStock: { "Free Size": 3 },
     reviews: [],
     isFeatured: false,
     isNewArrival: true,
@@ -627,9 +628,8 @@ class ProductService {
     const product = this.getProductById(id);
     if (!product) return null;
     const restocked: Record<string, number> = {};
-    const defaultSizes = Object.keys(product.sizeStock || {}).length > 0 
-      ? Object.keys(product.sizeStock) 
-      : ["S", "M", "L", "XL"];
+    // Every size this kind of product is sold in (kurtas S to XXL, sarees Free Size)
+    const defaultSizes = getSizeOptionsFor(product.category);
     
     defaultSizes.forEach(size => {
       restocked[size] = quantityPerSize;

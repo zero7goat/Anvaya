@@ -1,6 +1,7 @@
 import type { MouseEvent } from "react";
 import { CollectionType, Product } from "../types";
 import { getProductImages } from "../data/imageRegistry";
+import { getSizeOptionsFor } from "./sizes";
 
 /**
  * Small, shared presentation helpers for product data, so the product card,
@@ -20,12 +21,11 @@ export const getDiscountPercent = (product: Product): number | null =>
 export const getCollectionKey = (product: Product): CollectionType =>
   product.collection || (product.category === "Sarees" ? "ayanaa" : "alankritha");
 
-// Supported sizes, in display order. Every product (kurtas and sarees) uses these.
-export const CLOTHING_SIZES = ["S", "M", "L", "XL"] as const;
+export { ALL_SIZES, CLOTHING_SIZES, FREE_SIZE, SAREE_SIZES, describeSize, getSizeOptionsFor } from "./sizes";
 
-// Sizes a shopper can choose from: every supported size, with sizes that have no stock
-// configured treated as sold out.
-export const getSizeOptions = (_product: Product): string[] => [...CLOTHING_SIZES];
+// Sizes a shopper can choose from, in display order: kurtas S to XXL, sarees Free Size.
+// Sizes with no stock configured are treated as sold out.
+export const getSizeOptions = (product: Product): string[] => getSizeOptionsFor(product.category);
 
 export const getAvailableSizes = (product: Product): string[] =>
   getSizeOptions(product).filter((size) => (product.sizeStock?.[size] || 0) > 0);

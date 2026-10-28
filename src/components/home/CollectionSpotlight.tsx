@@ -121,7 +121,7 @@ function CampaignPlaceholder({ label }: { label: string }) {
       className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-maroon-900 text-gold-300 text-center px-6"
       data-asset-slot={label}
     >
-      <img src="/images/Logo.png" alt="" className="h-14 w-auto object-contain opacity-80" decoding="async" />
+      <img src="/images/logo-144.png" width={159} height={144} alt="" className="h-14 w-auto object-contain opacity-80" decoding="async" />
       <span className="text-2xs font-semibold uppercase tracking-[0.22em]">{label} coming soon</span>
     </div>
   );

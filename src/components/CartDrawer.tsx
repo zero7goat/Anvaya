@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { OVERLAY_MOTION } from "../utils/motion";
 import { X, ShoppingBag, Trash2, ArrowRight, Tag, CheckCircle, AlertCircle } from "lucide-react";
@@ -6,6 +6,9 @@ import { CartItem, Offer } from "../types";
 import { offerService } from "../services/offerService";
 import ProductImage from "./ProductImage";
 import { getProductImage } from "../data/imageRegistry";
+import { BOUTIQUE_CONFIG } from "../config";
+import { calculateCartTotals, getOfferIneligibility, getUnitPrice } from "../utils/pricing";
+import { useOverlay } from "../hooks/useOverlay";
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -13,7 +16,7 @@ interface CartDrawerProps {
   cartItems: CartItem[];
   onUpdateQuantity: (productId: string, size: string, quantity: number) => void;
   onRemoveItem: (productId: string, size: string) => void;
-  onCheckout: (appliedPromoCode?: string, discountAmount?: number) => void;
+  onCheckout: (appliedPromoCode?: string) => void;
 }
 
 export default function CartDrawer({
@@ -30,37 +33,18 @@ export default function CartDrawer({
   const [promoSuccess, setPromoSuccess] = useState<string>("");
   const [checkingPromo, setCheckingPromo] = useState<boolean>(false);
 
-  // Calculate costs in Indian Rupees (₹)
-  const subtotal = useMemo(() => {
-    return cartItems.reduce((sum, item) => {
-      const price = item.product.salePrice || item.product.price;
-      return sum + price * item.quantity;
-    }, 0);
-  }, [cartItems]);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useOverlay(isOpen, onClose, panelRef);
 
-  const shippingThreshold = 1999; // ₹1,999 threshold for free shipping in India
-  const shippingCost = subtotal === 0 || subtotal >= shippingThreshold ? 0 : 99;
-
-  // Validate and apply promo discount
-  const discountAmount = useMemo(() => {
-    if (!activeOffer || subtotal === 0) return 0;
-    
-    // Check minimum spend eligibility
-    if (activeOffer.minSpend && subtotal < activeOffer.minSpend) {
-      return 0;
-    }
-
-    if (activeOffer.type === "percent") {
-      return Math.round((subtotal * activeOffer.discountValue) / 100);
-    } else {
-      return activeOffer.discountValue; // Flat discount
-    }
-  }, [activeOffer, subtotal]);
-
-  const grandTotal = Math.max(0, subtotal - discountAmount + shippingCost);
+  // Same rules as checkout: subtotal, coupon (re-checked as the bag changes), shipping
+  const { subtotal, discount: discountAmount, shipping: shippingCost, total: grandTotal, amountToFreeShipping } =
+    calculateCartTotals(cartItems, activeOffer, BOUTIQUE_CONFIG);
+  // An applied coupon the bag no longer qualifies for (e.g. after removing a piece)
+  const couponNoLongerApplies = activeOffer ? getOfferIneligibility(activeOffer, subtotal) : null;
 
   // Validate Promo Code against in-memory offers
-  const handleApplyPromo = async () => {
+  const handleApplyPromo = async (e?: FormEvent) => {
+    e?.preventDefault();
     if (!promoCode.trim()) return;
     setCheckingPromo(true);
     setPromoError("");
@@ -72,8 +56,8 @@ export default function CartDrawer({
       if (!matched) {
         setPromoError("Invalid coupon or code expired.");
         setActiveOffer(null);
-      } else if (matched.minSpend && subtotal < matched.minSpend) {
-        setPromoError(`Requires a minimum spend of ₹${matched.minSpend.toLocaleString("en-IN")}.`);
+      } else if (getOfferIneligibility(matched, subtotal)) {
+        setPromoError(getOfferIneligibility(matched, subtotal)!);
         setActiveOffer(null);
       } else {
         setActiveOffer(matched);
@@ -87,7 +71,7 @@ export default function CartDrawer({
   };
 
   const handleCheckoutClick = () => {
-    onCheckout(activeOffer?.code || undefined, discountAmount || undefined);
+    onCheckout(discountAmount > 0 ? activeOffer?.code : undefined);
   };
 
   return (
@@ -103,16 +87,21 @@ export default function CartDrawer({
 
       <div className="absolute inset-y-0 right-0 max-w-full flex pl-10" id="cart-drawer-slider-container">
           <motion.div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cart-drawer-title"
+            tabIndex={-1}
             {...OVERLAY_MOTION.drawerRight}
-            className="w-screen max-w-md bg-canvas flex flex-col h-full shadow-2xl"
+            className="w-[calc(100vw-2.5rem)] max-w-md bg-canvas flex flex-col h-full shadow-2xl outline-none"
             id="cart-drawer-card"
           >
             {/* Drawer Header */}
             <div className="px-4 py-4 sm:px-6 border-b border-line flex items-center justify-between bg-surface" id="cart-drawer-header">
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <ShoppingBag className="w-4 h-4 text-accent" />
-                <h2 className="heading-card text-lg sm:text-lg">Your Wardrobe Bag</h2>
-                <span className="badge badge-neutral tabular-nums">
+                <h2 id="cart-drawer-title" className="heading-card text-lg sm:text-lg">Your Wardrobe Bag</h2>
+                <span className="badge badge-neutral tabular-nums" aria-label={`${cartItems.length} ${cartItems.length === 1 ? "item" : "items"}`}>
                   {cartItems.length}
                 </span>
               </div>
@@ -133,7 +122,7 @@ export default function CartDrawer({
                   <div>
                     <h3 className="heading-card text-lg sm:text-lg">Your shopping bag is empty</h3>
                     <p className="text-sm text-muted mt-1 max-w-xs leading-relaxed">
-                      Explore our handcrafted silk sarees, kurtas and linen co-ord sets to fill your bag.
+                      Explore our handcrafted kurtas and sarees to fill your bag.
                     </p>
                   </div>
                   <button
@@ -146,7 +135,7 @@ export default function CartDrawer({
                 </div>
               ) : (
                 cartItems.map((item) => {
-                  const itemPrice = item.product.salePrice || item.product.price;
+                  const itemPrice = getUnitPrice(item.product);
                   const itemTotalPrice = itemPrice * item.quantity;
                   const availableSizeStock = item.product.sizeStock ? (item.product.sizeStock[item.selectedSize] || 0) : 0;
                   const reachedMax = item.quantity >= availableSizeStock;
@@ -163,7 +152,7 @@ export default function CartDrawer({
                       </div>
 
                     {/* Clothing Meta details */}
-                    <div className="ml-4 flex-1 flex flex-col justify-between h-20">
+                    <div className="ml-3 sm:ml-4 flex-1 min-w-0 flex flex-col justify-between gap-2 min-h-20">
                       <div>
                         <span className="eyebrow">
                           {item.product.category}
@@ -181,7 +170,8 @@ export default function CartDrawer({
                         <button
                           onClick={() => onUpdateQuantity(item.product.id, item.selectedSize, item.quantity - 1)}
                           disabled={item.quantity <= 1}
-                          className="w-6 h-6 border border-line-strong rounded-xs flex items-center justify-center text-xs text-muted hover:text-ink hover:border-ink transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer font-bold"
+                          aria-label={`Decrease quantity of ${item.product.name}`}
+                          className="shrink-0 w-8 h-8 sm:w-6 sm:h-6 border border-line-strong rounded-xs flex items-center justify-center text-xs text-muted hover:text-ink hover:border-ink transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer font-bold"
                         >
                           -
                         </button>
@@ -191,7 +181,8 @@ export default function CartDrawer({
                         <button
                           onClick={() => onUpdateQuantity(item.product.id, item.selectedSize, item.quantity + 1)}
                           disabled={reachedMax}
-                          className="w-6 h-6 border border-line-strong rounded-xs flex items-center justify-center text-xs text-muted hover:text-ink hover:border-ink transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer font-bold"
+                          aria-label={`Increase quantity of ${item.product.name}`}
+                          className="shrink-0 w-8 h-8 sm:w-6 sm:h-6 border border-line-strong rounded-xs flex items-center justify-center text-xs text-muted hover:text-ink hover:border-ink transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer font-bold"
                         >
                           +
                         </button>
@@ -204,7 +195,7 @@ export default function CartDrawer({
                     </div>
 
                     {/* Pricing in Rupees & trash */}
-                    <div className="ml-4 flex flex-col items-end justify-between h-20 shrink-0">
+                    <div className="ml-2 sm:ml-4 flex flex-col items-end justify-between min-h-20 shrink-0">
                       <span className="price text-sm">
                         ₹{itemTotalPrice.toLocaleString("en-IN")}
                       </span>
@@ -212,6 +203,7 @@ export default function CartDrawer({
                         onClick={() => onRemoveItem(item.product.id, item.selectedSize)}
                         className="btn-icon btn-icon-sm hover:!text-danger hover:!bg-danger-soft"
                         title="Remove outfit"
+                        aria-label={`Remove ${item.product.name} (size ${item.selectedSize})`}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -225,42 +217,52 @@ export default function CartDrawer({
           {/* Checkout & Coupon Promo Footer */}
           {cartItems.length > 0 && (
             <div className="border-t border-line p-4 sm:p-6 bg-surface space-y-4" id="cart-drawer-footer">
-              
+
               {/* Coupon Entry Field */}
               <div className="panel-muted p-3 space-y-2" id="coupon-field-container">
-                <div className="flex items-center space-x-1.5 field-label mb-0">
-                  <Tag className="w-3.5 h-3.5 text-accent" />
+                <label htmlFor="cart-coupon-input" className="flex items-center space-x-1.5 field-label mb-0">
+                  <Tag className="w-3.5 h-3.5 text-accent" aria-hidden="true" />
                   <span>Promo Coupon Code</span>
-                </div>
-                
-                <div className="flex space-x-2">
+                </label>
+
+                <form onSubmit={handleApplyPromo} className="flex gap-2">
                   <input
+                    id="cart-coupon-input"
                     type="text"
-                    placeholder="Enter Coupon (e.g. ALANKRITHA10)"
+                    placeholder="e.g. ALANKRITHA10"
                     value={promoCode}
                     onChange={(e) => setPromoCode(e.target.value)}
-                    className="field field-sm flex-1 uppercase"
+                    autoCapitalize="characters"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="field field-sm flex-1 min-w-0 uppercase"
                   />
                   <button
-                    onClick={handleApplyPromo}
+                    type="submit"
                     disabled={checkingPromo || !promoCode.trim()}
-                    className="btn btn-primary btn-sm"
+                    className="btn btn-primary btn-sm shrink-0"
                   >
                     {checkingPromo ? "Validating..." : "Apply"}
                   </button>
-                </div>
+                </form>
 
                 {promoError && (
-                  <p className="field-error mt-1">
+                  <p className="field-error mt-1" role="alert">
                     <AlertCircle className="w-3 h-3" />
                     <span>{promoError}</span>
                   </p>
                 )}
 
-                {promoSuccess && (
-                  <p className="field-error mt-1 !text-success">
+                {promoSuccess && !couponNoLongerApplies && (
+                  <p className="field-error mt-1 !text-success" role="status">
                     <CheckCircle className="w-3 h-3" />
                     <span>{promoSuccess}</span>
+                  </p>
+                )}
+                {couponNoLongerApplies && (
+                  <p className="field-error mt-1" role="status">
+                    <AlertCircle className="w-3 h-3" />
+                    <span>{activeOffer!.code} no longer applies: {couponNoLongerApplies}</span>
                   </p>
                 )}
               </div>
@@ -271,7 +273,7 @@ export default function CartDrawer({
                   <span>Subtotal</span>
                   <span className="font-semibold text-ink tabular-nums">₹{subtotal.toLocaleString("en-IN")}</span>
                 </div>
-                
+
                 {discountAmount > 0 && (
                   <div className="flex justify-between text-success font-semibold">
                     <span>Promo Coupon Discount</span>
@@ -292,7 +294,7 @@ export default function CartDrawer({
 
                 {shippingCost > 0 && (
                   <div className="text-xs text-accent font-medium pt-0.5 text-right">
-                    Add ₹{(shippingThreshold - subtotal).toLocaleString("en-IN")} more for FREE home delivery.
+                    Add ₹{amountToFreeShipping.toLocaleString("en-IN")} more for FREE home delivery.
                   </div>
                 )}
 
@@ -311,9 +313,9 @@ export default function CartDrawer({
                 <span>Checkout Wardrobe</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
-              
+
               <div className="flex items-center justify-center space-x-1.5 text-xs text-muted">
-                <span>Handloomed packaging & trackable domestic dispatch</span>
+                <span>Cash on Delivery available · Delivering across India</span>
               </div>
             </div>
           )}

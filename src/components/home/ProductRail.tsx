@@ -102,7 +102,7 @@ export default function ProductRail({
                 aria-selected={active === edit}
                 aria-controls="product-rail-track"
                 onClick={() => setActive(edit)}
-                className={`whitespace-nowrap pb-3 text-2xs sm:text-sm font-semibold uppercase tracking-[0.1em] sm:tracking-[0.14em] border-b-2 transition-colors cursor-pointer ${
+                className={`whitespace-nowrap pt-2 pb-3 text-2xs sm:text-sm font-semibold uppercase tracking-[0.1em] sm:tracking-[0.14em] border-b-2 transition-colors cursor-pointer ${
                   active === edit ? "border-maroon-800 text-ink" : "border-transparent text-muted hover:text-ink"
                 }`}
               >
@@ -110,7 +110,7 @@ export default function ProductRail({
               </button>
             ))}
           </div>
-          <button onClick={() => onViewAll(active)} className="link text-xs shrink-0 pb-3">
+          <button onClick={() => onViewAll(active)} className="link text-xs shrink-0 pt-2 pb-3">
             View all
           </button>
         </div>
