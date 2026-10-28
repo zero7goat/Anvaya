@@ -381,14 +381,61 @@ export interface ProductFilterOptions {
   sortBy?: "newest" | "price-asc" | "price-desc" | "name";
 }
 
+export type CatalogueSource = "supabase" | "built-in";
+
+// Longest wait for Supabase before the site opens with the built-in catalogue
+const CATALOGUE_TIMEOUT_MS = 5000;
+
 /**
  * IN-MEMORY PRODUCT REPOSITORY SERVICE LAYER
  */
 class ProductService {
   private products: Product[];
 
+  private catalogueLoad: Promise<CatalogueSource> | null = null;
+
   constructor() {
     this.products = [...INITIAL_SAMPLE_PRODUCTS];
+  }
+
+  /**
+   * True when Supabase is configured, so the catalogue is read from it at startup
+   */
+  public usesRemoteCatalogue(): boolean {
+    const env = import.meta.env;
+    return Boolean(env?.VITE_SUPABASE_URL && env?.VITE_SUPABASE_PUBLISHABLE_KEY);
+  }
+
+  /**
+   * Replace the built-in sample catalogue with the one in Supabase (read-only).
+   * Keeps the built-in catalogue when Supabase is not configured, fails, is slow,
+   * or has no products yet. Safe to call more than once: it loads only once.
+   */
+  public loadCatalogue(): Promise<CatalogueSource> {
+    this.catalogueLoad ??= this.loadRemoteCatalogue();
+    return this.catalogueLoad;
+  }
+
+  private async loadRemoteCatalogue(): Promise<CatalogueSource> {
+    if (!this.usesRemoteCatalogue()) return "built-in";
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), CATALOGUE_TIMEOUT_MS);
+    try {
+      const { fetchSupabaseCatalogue } = await import("./supabaseCatalogue");
+      const products = await fetchSupabaseCatalogue(controller.signal);
+      if (controller.signal.aborted) throw new Error("timed out");
+      if (products.length === 0) {
+        console.warn("[catalogue] Supabase has no products yet, using the built-in catalogue.");
+        return "built-in";
+      }
+      this.products = products;
+      return "supabase";
+    } catch (error) {
+      console.warn("[catalogue] Could not load products from Supabase, using the built-in catalogue.", error);
+      return "built-in";
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**

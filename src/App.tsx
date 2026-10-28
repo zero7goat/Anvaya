@@ -92,13 +92,15 @@ export default function App() {
   // Style to preselect when a collection page is opened from a style link (footer);
   // `id` changes on every request so the page re-mounts with that style
   const [collectionPreset, setCollectionPreset] = useState<{ style: string; id: number } | null>(null);
+  // When Supabase is configured the site waits for its catalogue (or the fallback) before showing prices
+  const [catalogueReady, setCatalogueReady] = useState(() => !productService.usesRemoteCatalogue());
 
   // The very first page render is shown immediately (no fade), so content is never
   // hidden behind an animation on first load; later view changes fade in.
   const isFirstRender = useRef(true);
   useEffect(() => {
-    isFirstRender.current = false;
-  }, []);
+    if (catalogueReady) isFirstRender.current = false;
+  }, [catalogueReady]);
 
   // Load products & orders from repository
   const loadStorefrontData = () => {
@@ -135,9 +137,15 @@ export default function App() {
   }, [isCheckoutOpen, isInboxOpen, isLoginOpen]);
 
   useEffect(() => {
-    loadStorefrontData();
+    let active = true;
+    productService.loadCatalogue().then(() => {
+      if (!active) return;
+      loadStorefrontData();
+      setCatalogueReady(true);
+    });
     smoothScroll.init();
     return () => {
+      active = false;
       smoothScroll.destroy();
     };
   }, []);
@@ -306,6 +314,8 @@ export default function App() {
   // -------------------------------------------------------------
   // VIEW: ADMIN DASHBOARD (/admin)
   // -------------------------------------------------------------
+  if (!catalogueReady) return <PageLoading />;
+
   if (currentView === "admin") {
     return (
       <Suspense fallback={<PageLoading />}>
