@@ -1,0 +1,259 @@
+{
+  "products": [
+    {
+      "id": "best-1",
+      "name": "Turquoise Cotton Floral Printed Straight Suit Set",
+      "description": "An elegant turquoise straight-cut suit set adorned with traditional hand-blocked floral patterns, fine thread work at the yoke, and a sheer lightweight dupatta.",
+      "category": "Kurtas",
+      "subcategory": "Straight Fit",
+      "price": 3599,
+      "salePrice": 2519,
+      "image": "https://images.biba.in/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-biba-product-catalog/default/dwde10fa80/images/ss26/skdasrt32417ss26tur_1.jpg?sw=650&sh=975&q=100&strip=false",
+      "sizeStock": {
+        "S": 5,
+        "M": 6,
+        "L": 8,
+        "XL": 4
+      },
+      "reviews": [],
+      "isFeatured": true,
+      "isNewArrival": true,
+      "status": "enabled"
+    },
+    {
+      "id": "best-2",
+      "name": "Rust Printed Straight Suit Set",
+      "description": "Sophisticated rust orange direct-line silhouette suit with abstract artisanal print detailing, matching relaxed trouser pants, and a gorgeous patterned border drapery.",
+      "category": "Kurtas",
+      "subcategory": "Straight Fit",
+      "price": 3999,
+      "salePrice": 2000,
+      "image": "https://images.biba.in/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-biba-product-catalog/default/dw5b4f815f/images/aw25/skdasrt30604aw25rust_1.jpg?sw=650&sh=975&q=100&strip=false",
+      "sizeStock": {
+        "S": 3,
+        "M": 4,
+        "L": 5,
+        "XL": 2
+      },
+      "reviews": [],
+      "isFeatured": true,
+      "isNewArrival": false,
+      "status": "enabled"
+    },
+    {
+      "id": "best-3",
+      "name": "Red Embroidered Art Silk Straight Suit Set",
+      "description": "Indulge in festive luxury with this vibrant red art-silk kurta set. Features rich, golden brocade hand embroideries on the collar neckline and sleeves.",
+      "category": "Kurtas",
+      "subcategory": "Straight Fit",
+      "price": 5995,
+      "salePrice": 3597,
+      "image": "https://images.biba.in/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-biba-product-catalog/default/dwfe4e0739/images/aw25/skdutsv31130aw25red_1.jpg?sw=650&sh=975&q=100&strip=false",
+      "sizeStock": {
+        "S": 2,
+        "M": 3,
+        "L": 4,
+        "XL": 1
+      },
+      "reviews": [],
+      "isFeatured": true,
+      "isNewArrival": true,
+      "status": "enabled"
+    },
+    {
+      "id": "best-4",
+      "name": "Green Cotton Floral & Chevron Printed Straight Suit Set",
+      "description": "A delightful amalgamation of floral prints and geometric chevrons in a rich pine-green shade. Soft breathable cotton fabric perfect for hot Indian summers.",
+      "category": "Kurtas",
+      "subcategory": "Straight Fit",
+      "price": 2599,
+      "salePrice": 2079,
+      "image": "https://images.biba.in/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-biba-product-catalog/default/dw6099e30b/images/ss26/skdasrt32196ss26grn_1.jpg?sw=650&sh=975&q=100&strip=false",
+      "sizeStock": {
+        "S": 6,
+        "M": 8,
+        "L": 5,
+        "XL": 3
+      },
+      "reviews": [],
+      "isFeatured": true,
+      "isNewArrival": true,
+      "status": "enabled"
+    },
+    {
+      "id": "best-5",
+      "name": "Purple Rayon Printed Straight Kurta Set",
+      "description": "Chic daily wear purple rayon comfort kurta with micro floral prints, contrasting block-print dupatta, and cozy matching cigarette trousers.",
+      "category": "Kurtas",
+      "subcategory": "Straight Fit",
+      "price": 2999,
+      "salePrice": 2399,
+      "image": "https://images.biba.in/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-biba-product-catalog/default/dw4e627810/images/ss26/skdasrt9709ess26pur_1.jpg?sw=650&sh=975&q=100&strip=false",
+      "sizeStock": {
+        "S": 4,
+        "M": 5,
+        "L": 6,
+        "XL": 2
+      },
+      "reviews": [],
+      "isFeatured": true,
+      "isNewArrival": true,
+      "status": "enabled"
+    },
+    {
+      "id": "prod-2",
+      "name": "Mayura Banarasi Silk Saree",
+      "description": "Handloomed with golden Zari work, this traditional Banarasi Silk Saree features peacock motifs and an ornate floral pallu in deep royal indigo and crimson.",
+      "category": "Sarees",
+      "subcategory": "Banarasi Silk",
+      "price": 8999,
+      "salePrice": 7999,
+      "image": "https://images.unsplash.com/photo-1610030470298-40b355e5a7b3?w=800&auto=format&fit=crop&q=80",
+      "sizeStock": {
+        "FS": 12
+      },
+      "reviews": [
+        {
+          "id": "rev-2",
+          "author": "Anjali G.",
+          "rating": 5,
+          "comment": "The zari work is incredibly detailed and heavy. The drape is elegant and has a majestic sheen.",
+          "date": "2026-08-12",
+          "verified": true,
+          "brandReply": "Thank you Anjali! Each saree is woven by our master artisans to bring out that royal sheen."
+        }
+      ],
+      "isFeatured": true,
+      "isNewArrival": false,
+      "status": "enabled"
+    },
+    {
+      "id": "prod-3",
+      "name": "Classic Linen 2-Piece Co-ord Set",
+      "description": "A breezy, minimalist 2-piece Co-ord Set featuring a relaxed-fit linen tunic and matching wide-leg trousers in an organic terracotta hue.",
+      "category": "Co-ord Sets",
+      "subcategory": "2-piece",
+      "price": 2499,
+      "salePrice": 1999,
+      "image": "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=800&auto=format&fit=crop&q=80",
+      "sizeStock": {
+        "S": 5,
+        "M": 6,
+        "L": 2,
+        "XL": 1
+      },
+      "reviews": [],
+      "isFeatured": false,
+      "isNewArrival": true,
+      "status": "enabled"
+    },
+    {
+      "id": "prod-4",
+      "name": "Kavya Embroidered 3-Piece Co-ord Set",
+      "description": "A versatile, elegant 3-piece linen-silk ensemble consisting of a hand-embroidered crop bustier, tailored high-rise trousers, and a fluid, sheer overlay jacket.",
+      "category": "Co-ord Sets",
+      "subcategory": "3-piece",
+      "price": 4299,
+      "image": "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=800&auto=format&fit=crop&q=80",
+      "sizeStock": {
+        "S": 3,
+        "M": 4,
+        "L": 2,
+        "XL": 1
+      },
+      "reviews": [
+        {
+          "id": "rev-3",
+          "author": "Meera R.",
+          "rating": 4,
+          "comment": "Beautiful hand embroidery and very comfortable for hot climates. The overlay jacket can be paired with so many other outfits!",
+          "date": "2026-08-14",
+          "verified": true,
+          "brandReply": "Meera, we love that you are styling the sheer overlay jacket in multiple ways! Versatility is core to our brand."
+        }
+      ],
+      "isFeatured": true,
+      "isNewArrival": true,
+      "status": "enabled"
+    },
+    {
+      "id": "prod-5",
+      "name": "Meera Pastel Organza Saree",
+      "description": "A dreamy, lightweight pastel sage green Organza Saree finished with hand-painted floral vignettes and delicate scalloped embroidery on the borders.",
+      "category": "Sarees",
+      "subcategory": "Organza",
+      "price": 4899,
+      "salePrice": 3999,
+      "image": "https://images.unsplash.com/photo-1583391265517-35bbadd01209?w=800&auto=format&fit=crop&q=80",
+      "sizeStock": {
+        "FS": 5
+      },
+      "reviews": [],
+      "isFeatured": false,
+      "isNewArrival": true,
+      "status": "enabled"
+    }
+  ],
+  "categories": [
+    {
+      "id": "cat-1",
+      "name": "Kurtas",
+      "subcategories": [
+        "Straight Fit",
+        "A-Line",
+        "Anarkali"
+      ]
+    },
+    {
+      "id": "cat-2",
+      "name": "Sarees",
+      "subcategories": [
+        "Banarasi Silk",
+        "Organza",
+        "Katan Silk"
+      ]
+    }
+  ],
+  "orders": [],
+  "offlineSales": [],
+  "offers": [
+    {
+      "id": "off-1",
+      "title": "Inaugural Store Discount",
+      "code": "ALANKRITHA10",
+      "discountValue": 10,
+      "type": "percent",
+      "enabled": true,
+      "minSpend": 1500
+    },
+    {
+      "id": "off-2",
+      "title": "Festive Flat Discount",
+      "code": "FESTIVE500",
+      "discountValue": 500,
+      "type": "flat",
+      "enabled": true,
+      "minSpend": 4000
+    }
+  ],
+  "analytics": {
+    "visitors": 482,
+    "pageViews": 1284,
+    "productViews": 642,
+    "popularProducts": {
+      "prod-2": 92,
+      "prod-4": 84,
+      "prod-5": 58
+    },
+    "trafficSources": {
+      "Instagram": 284,
+      "Direct": 121,
+      "WhatsApp": 54,
+      "Google": 23
+    },
+    "devices": {
+      "Mobile": 381,
+      "Desktop": 101
+    }
+  }
+}

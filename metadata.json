@@ -1,0 +1,8 @@
+{
+  "name": "ANVAYA | Indian Ethnic Wear",
+  "description": "ANVAYA handcrafted Indian ethnic wear featuring two signature collections: Alankritha (exclusively women's kurtas) and Ayanaa (exclusively women's sarees).",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
