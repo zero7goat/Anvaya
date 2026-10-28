@@ -865,3 +865,13 @@ img {
 @media (prefers-reduced-motion: reduce) {
   .offers-marquee { animation: none; }
 }
+
+/* Mobile hero slides: the leaving and arriving banners glide sideways together.
+   Kept even with "reduce motion" on (overriding the global rule above), because the
+   visitor starts each change by swiping; autoplay is off for those visitors. */
+.hero-slide {
+  will-change: transform;
+}
+.hero-slide.hero-slide-moving {
+  transition: transform 700ms cubic-bezier(0.22, 1, 0.36, 1) !important;
+}

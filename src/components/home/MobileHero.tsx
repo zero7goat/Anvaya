@@ -1,36 +1,47 @@
 import { Fragment, ReactNode, TouchEvent, useEffect, useRef, useState } from "react";
-import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { CollectionType } from "../../types";
 import { BOUTIQUE_CONFIG } from "../../config";
 import { offerService } from "../../services/offerService";
 import { SITE_IMAGES, HeroSlide } from "../../data/imageRegistry";
 import { IMAGE_WIDTHS, imageAtWidth, responsiveImage } from "../../utils/imageSources";
-import { SLIDE_VARIANTS } from "../../utils/motion";
 import { formatINR } from "../../utils/productDisplay";
 import { getStyleCards } from "./ShopByStyle";
 
 const SLIDES = SITE_IMAGES.mobileHeroSlides;
 const AUTOPLAY_MS = 5500;
+// Delay before the neighbouring banners start downloading on first load
 const PRELOAD_DELAY_MS = 1500;
 const SWIPE_THRESHOLD_PX = 40;
 const slideSources = (slide: HeroSlide) => responsiveImage(slide.image, IMAGE_WIDTHS.mobileHero);
 
-// Start downloading a banner (same size choice as the <img>), so it is ready before it slides in
-const preloadSlide = (slide: HeroSlide) => {
-  const { src, srcSet } = slideSources(slide);
-  const img = new Image();
-  img.referrerPolicy = "no-referrer";
-  if (srcSet) {
-    img.sizes = "100vw";
-    img.srcset = srcSet;
-  }
-  img.src = src;
+// Position of slide i relative to the current one: 0 = on screen, 1 = waiting on the
+// right, -1 = waiting on the left, 2 = parked out of sight
+const relativeOffset = (i: number, current: number) => {
+  const n = SLIDES.length;
+  const d = (i - current + n) % n;
+  if (d === 0) return 0;
+  if (d === 1) return 1;
+  if (d === n - 1) return -1;
+  return 2;
+};
+
+type Carousel = {
+  current: number;
+  // Slide that just moved out (it keeps sliding off to the side)
+  previous: number | null;
+  // 1 = moving to the next slide (slides travel left), -1 = moving back (travel right)
+  direction: number;
+  // Slide placed just off-screen, ready to slide in after a jump to a non-adjacent dot
+  staged: number | null;
 };
 
 /**
  * Phone-width homepage hero: a full-bleed portrait carousel under the transparent
- * header. Slides move sideways; swipe left or right, tap a dot, or let it autoplay.
- * Then a scrolling offers strip and a row of arched style shortcuts.
+ * header. Every banner sits side by side; changing slides moves the current banner
+ * out to the left (or right) while the next one moves in beside it, like the desktop
+ * hero. The banner follows the finger while swiping. Movement is a plain CSS
+ * transition (see .hero-slide in index.css). Then a scrolling offers strip and a row
+ * of arched style shortcuts.
  */
 export default function MobileHero({
   onExploreClick,
@@ -41,83 +52,153 @@ export default function MobileHero({
   onShopCategory: (category: string) => void;
   onNavigateCollectionStyle: (collection: CollectionType, style: string) => void;
 }) {
-  // direction: 1 = moving to the next slide (slides travel left), -1 = previous
-  const [{ current, direction }, setSlide] = useState({ current: 0, direction: 1 });
-  const touchStartX = useRef<number | null>(null);
-  const goTo = (idx: number, dir: number) =>
-    setSlide({ current: (idx + SLIDES.length) % SLIDES.length, direction: dir });
+  const [{ current, previous, direction, staged }, setCarousel] = useState<Carousel>({
+    current: 0,
+    previous: null,
+    direction: 1,
+    staged: null,
+  });
+  // Finger drag in progress (px), or null when not dragging
+  const [dragX, setDragX] = useState<number | null>(null);
+  // Slides whose images have been requested; they stay rendered so they never reload
+  const [loaded, setLoaded] = useState<Set<number>>(() => new Set([0]));
+  // Gesture in progress; dx is kept here too so the release always sees the latest drag
+  const touch = useRef<{ x: number; y: number; dx: number; horizontal: boolean | null } | null>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  // Each slide's position in the previous render, to avoid animating a slide across the screen
+  const lastShift = useRef<Record<number, number>>({});
 
-  // Autoplay (off for reduced-motion users); restarts after every manual change
+  const goTo = (idx: number, dir: number) => {
+    const target = (idx + SLIDES.length) % SLIDES.length;
+    if (target === current) return;
+    setLoaded((prev) => (prev.has(target) ? prev : new Set([...prev, target])));
+    const commit = () => setCarousel({ current: target, previous: current, direction: dir, staged: null });
+    if (relativeOffset(target, current) === dir) {
+      commit();
+    } else {
+      // Not already waiting on the right side: place it there first, then slide it in
+      setCarousel((c) => ({ ...c, staged: target, direction: dir }));
+      setTimeout(commit, 40);
+    }
+  };
+
+  const loadNeighbours = () =>
+    setLoaded((prev) => {
+      const n = SLIDES.length;
+      const want = [current, (current + 1) % n, (current - 1 + n) % n];
+      return want.every((i) => prev.has(i)) ? prev : new Set([...prev, ...want]);
+    });
+
+  // Autoplay (off for reduced-motion users and while a finger is on the banner)
   useEffect(() => {
-    if (SLIDES.length < 2 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (SLIDES.length < 2 || dragX !== null) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const timer = setTimeout(() => goTo(current + 1, 1), AUTOPLAY_MS);
     return () => clearTimeout(timer);
-  }, [current]);
+  }, [current, dragX]);
 
-  // Fetch both neighbouring banners in the background (either swipe direction)
-  const preloadNeighbours = () => {
-    if (SLIDES.length < 2) return;
-    preloadSlide(SLIDES[(current + 1) % SLIDES.length]);
-    preloadSlide(SLIDES[(current - 1 + SLIDES.length) % SLIDES.length]);
-  };
+  // Load the banners on either side (after a short head start on first load) so they are ready
   useEffect(() => {
-    const timer = setTimeout(preloadNeighbours, PRELOAD_DELAY_MS);
+    const timer = setTimeout(loadNeighbours, previous === null ? PRELOAD_DELAY_MS : 0);
     return () => clearTimeout(timer);
   }, [current]);
 
   const onTouchStart = (e: TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-    // A finger on the hero means a swipe may follow: make sure its target is loading
-    preloadNeighbours();
+    touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, dx: 0, horizontal: null };
+    loadNeighbours();
   };
-  const onTouchEnd = (e: TouchEvent) => {
-    if (touchStartX.current === null) return;
-    const dx = e.changedTouches[0].clientX - touchStartX.current;
-    touchStartX.current = null;
-    // Swipe left = next slide, swipe right = previous
+  const onTouchMove = (e: TouchEvent) => {
+    const t = touch.current;
+    if (!t) return;
+    const dx = e.touches[0].clientX - t.x;
+    const dy = e.touches[0].clientY - t.y;
+    // Decide once whether this gesture is a sideways swipe or a page scroll
+    if (t.horizontal === null && (Math.abs(dx) > 6 || Math.abs(dy) > 6)) t.horizontal = Math.abs(dx) > Math.abs(dy);
+    if (t.horizontal) {
+      t.dx = dx;
+      setDragX(dx);
+    }
+  };
+  const onTouchEnd = () => {
+    const t = touch.current;
+    touch.current = null;
+    const dx = t?.dx ?? 0;
+    setDragX(null);
+    if (!t?.horizontal) return;
+    // Swipe left = next slide, swipe right = previous; a short drag springs back
     if (Math.abs(dx) > SWIPE_THRESHOLD_PX) goTo(current + (dx < 0 ? 1 : -1), dx < 0 ? 1 : -1);
   };
 
-  const slide = SLIDES[current];
-  const { src, srcSet } = slideSources(slide);
+  const width = frameRef.current?.clientWidth || 1;
+
+  // Where each slide sits (in % of the frame width) and whether it glides there
+  const placement = (i: number) => {
+    const offset = relativeOffset(i, current);
+    let shift: number;
+    if (dragX !== null) shift = offset * 100 + (Math.abs(offset) <= 1 ? (dragX / width) * 100 : 0);
+    else if (i === staged) shift = direction * 100;
+    else if (i === current) shift = 0;
+    else if (i === previous) shift = -direction * 100;
+    else shift = offset * 100;
+    const visible = shift > -200 && shift < 200;
+    const before = lastShift.current[i];
+    // Glide unless dragging or staging, and never sweep a slide across from one side to the other
+    const crosses = before !== undefined && before * shift < 0;
+    const animates = dragX === null && staged === null && visible && !crosses;
+    return { shift, visible, animates };
+  };
+  const placements = SLIDES.map((_, i) => placement(i));
+  useEffect(() => {
+    placements.forEach((p, i) => (lastShift.current[i] = p.shift));
+  });
 
   return (
     <>
-      {/* Slides always move sideways, even with the phone's "reduce motion" setting on:
-          the visitor starts each swipe. Autoplay stays off for those visitors. */}
-      <MotionConfig reducedMotion="never">
       <section
         className="relative w-full -mt-14 overflow-hidden select-none bg-maroon-950"
         id="mobile-hero"
         aria-roledescription="carousel"
         aria-label="Featured"
         onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
       >
-        {/* 3:4 frame: slides move through it sideways, so the layout never shifts */}
-        <div className="relative w-full aspect-[3/4] overflow-hidden cursor-pointer" onClick={onExploreClick}>
-          <AnimatePresence initial={false} custom={direction}>
-            <motion.img
-              key={slide.id}
-              src={src}
-              srcSet={srcSet}
-              sizes={srcSet ? "100vw" : undefined}
-              alt={slide.alt}
-              referrerPolicy="no-referrer"
-              fetchPriority={current === 0 ? "high" : "auto"}
-              decoding="async"
-              draggable={false}
-              custom={direction}
-              variants={SLIDE_VARIANTS}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              style={{ objectPosition: slide.position }}
-              className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-              aria-roledescription="slide"
-              aria-label={`${current + 1} of ${SLIDES.length}`}
-            />
-          </AnimatePresence>
+        {/* 3:4 frame; vertical page scrolling still works over it (touch-action: pan-y) */}
+        <div
+          ref={frameRef}
+          className="relative w-full aspect-[3/4] overflow-hidden cursor-pointer touch-pan-y"
+          onClick={onExploreClick}
+        >
+          {SLIDES.map((slide, i) => {
+            const { shift, visible, animates } = placements[i];
+            const { src, srcSet } = slideSources(slide);
+            return (
+              <div
+                key={slide.id}
+                className={`hero-slide absolute inset-0 ${animates ? "hero-slide-moving" : ""}`}
+                style={{ transform: `translateX(${shift}%)`, visibility: visible ? "visible" : "hidden" }}
+                aria-roledescription="slide"
+                aria-label={`${i + 1} of ${SLIDES.length}`}
+                aria-hidden={i !== current}
+              >
+                {loaded.has(i) && (
+                  <img
+                    src={src}
+                    srcSet={srcSet}
+                    sizes={srcSet ? "100vw" : undefined}
+                    alt={slide.alt}
+                    referrerPolicy="no-referrer"
+                    fetchPriority={i === 0 ? "high" : "auto"}
+                    decoding="async"
+                    draggable={false}
+                    style={{ objectPosition: slide.position }}
+                    className="w-full h-full object-cover pointer-events-none"
+                  />
+                )}
+              </div>
+            );
+          })}
           {/* Darker top so the header stays readable on light photos */}
           <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/45 to-transparent pointer-events-none" />
         </div>
@@ -128,7 +209,7 @@ export default function MobileHero({
             <button
               key={s.id}
               type="button"
-              onClick={() => goTo(idx, idx >= current ? 1 : -1)}
+              onClick={() => goTo(idx, idx > current ? 1 : -1)}
               aria-label={`Go to slide ${idx + 1}`}
               aria-current={current === idx}
               className="py-2 cursor-pointer"
@@ -142,7 +223,6 @@ export default function MobileHero({
           ))}
         </div>
       </section>
-      </MotionConfig>
 
       <OffersStrip />
       <StyleShortcuts onShopCategory={onShopCategory} onNavigateCollectionStyle={onNavigateCollectionStyle} />
