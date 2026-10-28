@@ -22,8 +22,8 @@ export default function CustomerReviews({ onProductClick }: { onProductClick: (p
 
   return (
     <section className="relative isolate overflow-hidden section-y border-t border-line" id="customer-reviews-section" aria-labelledby="customer-reviews-title">
-      <BackgroundMotif kind="mandala" className="-right-24 -top-10 w-72 h-72" />
-      <BackgroundMotif kind="paisley" className="left-6 bottom-6 w-24 h-40 rotate-[160deg]" />
+      <BackgroundMotif kind="mandala" className="-right-16 md:-right-24 -top-6 md:-top-10 w-40 h-40 md:w-72 md:h-72" />
+      <BackgroundMotif kind="paisley" className="left-2 md:left-6 bottom-4 md:bottom-6 w-16 h-28 md:w-24 md:h-40 rotate-[160deg]" />
       <div className="relative container-page">
         <SectionHeader eyebrow="In their words" title="Customer Reviews" id="customer-reviews-title" />
 

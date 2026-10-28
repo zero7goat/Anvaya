@@ -120,9 +120,9 @@ export default function LoginModal({
           {/* Sign-in area fills the first screen; the site footer follows below it */}
           <div className="min-h-full flex flex-col items-center">
            <div className="relative w-full flex-1 flex flex-col items-center min-h-[100svh]">
-            {/* Floral sprigs at the page edges (decorative, wide screens only) */}
-            <FloralSprig className="hidden md:block absolute left-0 top-1/2 -translate-y-1/2 h-[26rem] lg:h-[30rem] w-auto text-line-strong" />
-            <FloralSprig className="hidden md:block absolute right-0 top-1/2 -translate-y-1/2 h-[26rem] lg:h-[30rem] w-auto text-line-strong -scale-x-100" />
+            {/* Floral sprigs at the page edges (decorative; smaller and fainter on phones) */}
+            <FloralSprig className="absolute left-0 top-28 md:top-1/2 md:-translate-y-1/2 h-48 md:h-[26rem] lg:h-[30rem] w-auto text-line-strong opacity-50 md:opacity-100" />
+            <FloralSprig className="absolute right-0 bottom-20 md:bottom-auto md:top-1/2 md:-translate-y-1/2 h-48 md:h-[26rem] lg:h-[30rem] w-auto text-line-strong -scale-x-100 opacity-50 md:opacity-100" />
 
             {/* Brand mark */}
             <div className="flex flex-col items-center gap-2 pt-8 sm:pt-10 px-4" aria-hidden="true">

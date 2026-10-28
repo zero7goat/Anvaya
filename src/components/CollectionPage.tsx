@@ -184,8 +184,8 @@ export default function CollectionPage({
 
       {/* Collection heading: name, with "By Anvaya" directly beneath */}
       <header className="relative isolate container-page pt-8 pb-6 sm:pt-10 sm:pb-8">
-        <BackgroundMotif kind="paisley" className="right-6 lg:right-16 top-4 w-28 h-44 rotate-[20deg]" />
-        <BackgroundMotif kind="mandala" className="right-40 lg:right-52 top-10 w-24 h-24" />
+        <BackgroundMotif kind="paisley" className="right-2 md:right-6 lg:right-16 top-2 md:top-4 w-16 h-28 md:w-28 md:h-44 rotate-[20deg]" />
+        <BackgroundMotif kind="mandala" className="right-20 md:right-40 lg:right-52 top-4 md:top-10 w-14 h-14 md:w-24 md:h-24" />
         <h1 className="heading-title sm:text-4xl">{collectionInfo.name}</h1>
         <span className="eyebrow block mt-1.5 tracking-[0.28em]">{collectionInfo.byline}</span>
         <p className="text-body mt-4 max-w-2xl">

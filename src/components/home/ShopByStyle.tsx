@@ -48,8 +48,8 @@ export default function ShopByStyle({
 
   return (
     <section className="relative isolate overflow-hidden section-y border-t border-line" id="shop-by-style-section" aria-labelledby="shop-by-style-title">
-      <BackgroundMotif kind="sprig" className="right-0 top-6 w-32 h-80 -scale-x-100" />
-      <BackgroundMotif kind="mandala" className="-left-20 bottom-4 w-56 h-56" />
+      <BackgroundMotif kind="sprig" className="right-0 top-4 md:top-6 w-20 h-52 md:w-32 md:h-80 -scale-x-100" />
+      <BackgroundMotif kind="mandala" className="-left-14 md:-left-20 bottom-4 w-36 h-36 md:w-56 md:h-56" />
       <div className="relative container-page">
         <SectionHeader eyebrow="Kurtas & sarees" title="Shop by Style" id="shop-by-style-title" />
 

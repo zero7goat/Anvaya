@@ -1,5 +1,5 @@
 import React, { TouchEvent, useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { SLIDE_VARIANTS } from "../utils/motion";
 import { ArrowRight } from "lucide-react";
 import { BOUTIQUE_CONFIG } from "../config";
@@ -184,7 +184,9 @@ export default function Hero({
           className="relative w-full aspect-[2/1] max-h-[88vh] cursor-pointer"
           title="Explore Handcrafted Indian Ethnic Wear by Anvaya"
         >
-          {/* Slides move sideways through a fixed-size frame, so changing slides never shifts the layout */}
+          {/* Slides move sideways through a fixed-size frame, so changing slides never shifts the layout.
+              They always slide (even with "reduce motion" on), since the visitor starts each change */}
+          <MotionConfig reducedMotion="never">
           <AnimatePresence initial={false} custom={direction}>
             <motion.div
               key={activeFrame.id}
@@ -216,6 +218,7 @@ export default function Hero({
               )}
             </motion.div>
           </AnimatePresence>
+          </MotionConfig>
         </div>
 
         {/* Slide indicators */}
@@ -246,8 +249,8 @@ export default function Hero({
       {/* SECTION 2: OUR COLLECTIONS (2 ARCHED JHAROKHA CARDS) */}
       {/* ------------------------------------------------------------- */}
       <section className="relative isolate overflow-hidden w-full section-y" id="our-collections-section">
-        <BackgroundMotif kind="mandala" className="-left-24 top-10 w-72 h-72" />
-        <BackgroundMotif kind="mandala" className="-right-28 bottom-6 w-80 h-80" />
+        <BackgroundMotif kind="mandala" className="-left-20 md:-left-24 top-4 md:top-10 w-44 h-44 md:w-72 md:h-72" />
+        <BackgroundMotif kind="mandala" className="-right-20 md:-right-28 bottom-4 md:bottom-6 w-48 h-48 md:w-80 md:h-80" />
         <div className="relative container-page">
           
           {/* Section Heading: Centered uppercase serif matching wireframe */}

@@ -1,5 +1,5 @@
 import { Fragment, ReactNode, TouchEvent, useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { CollectionType } from "../../types";
 import { BOUTIQUE_CONFIG } from "../../config";
 import { offerService } from "../../services/offerService";
@@ -14,6 +14,18 @@ const AUTOPLAY_MS = 5500;
 const PRELOAD_DELAY_MS = 1500;
 const SWIPE_THRESHOLD_PX = 40;
 const slideSources = (slide: HeroSlide) => responsiveImage(slide.image, IMAGE_WIDTHS.mobileHero);
+
+// Start downloading a banner (same size choice as the <img>), so it is ready before it slides in
+const preloadSlide = (slide: HeroSlide) => {
+  const { src, srcSet } = slideSources(slide);
+  const img = new Image();
+  img.referrerPolicy = "no-referrer";
+  if (srcSet) {
+    img.sizes = "100vw";
+    img.srcset = srcSet;
+  }
+  img.src = src;
+};
 
 /**
  * Phone-width homepage hero: a full-bleed portrait carousel under the transparent
@@ -42,24 +54,21 @@ export default function MobileHero({
     return () => clearTimeout(timer);
   }, [current]);
 
-  // Fetch the next banner in the background so it is ready before it is shown
-  useEffect(() => {
+  // Fetch both neighbouring banners in the background (either swipe direction)
+  const preloadNeighbours = () => {
     if (SLIDES.length < 2) return;
-    const timer = setTimeout(() => {
-      const { src, srcSet } = slideSources(SLIDES[(current + 1) % SLIDES.length]);
-      const img = new Image();
-      img.referrerPolicy = "no-referrer";
-      if (srcSet) {
-        img.sizes = "100vw";
-        img.srcset = srcSet;
-      }
-      img.src = src;
-    }, PRELOAD_DELAY_MS);
+    preloadSlide(SLIDES[(current + 1) % SLIDES.length]);
+    preloadSlide(SLIDES[(current - 1 + SLIDES.length) % SLIDES.length]);
+  };
+  useEffect(() => {
+    const timer = setTimeout(preloadNeighbours, PRELOAD_DELAY_MS);
     return () => clearTimeout(timer);
   }, [current]);
 
   const onTouchStart = (e: TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
+    // A finger on the hero means a swipe may follow: make sure its target is loading
+    preloadNeighbours();
   };
   const onTouchEnd = (e: TouchEvent) => {
     if (touchStartX.current === null) return;
@@ -74,6 +83,9 @@ export default function MobileHero({
 
   return (
     <>
+      {/* Slides always move sideways, even with the phone's "reduce motion" setting on:
+          the visitor starts each swipe. Autoplay stays off for those visitors. */}
+      <MotionConfig reducedMotion="never">
       <section
         className="relative w-full -mt-14 overflow-hidden select-none bg-maroon-950"
         id="mobile-hero"
@@ -130,6 +142,7 @@ export default function MobileHero({
           ))}
         </div>
       </section>
+      </MotionConfig>
 
       <OffersStrip />
       <StyleShortcuts onShopCategory={onShopCategory} onNavigateCollectionStyle={onNavigateCollectionStyle} />

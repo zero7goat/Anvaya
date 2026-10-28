@@ -3,8 +3,8 @@ import { ReactNode } from "react";
 /**
  * Decorative block-print motifs for filling quiet areas of pages. All are drawn in
  * currentColor with canvas-coloured cut lines, so set the colour with a text-* class.
- * Use them through BackgroundMotif, which keeps them faint, behind content and
- * hidden on small screens.
+ * Use them through BackgroundMotif, which keeps them faint and behind content
+ * (fainter on phones; give phone and md: sizes in className).
  */
 
 // Pointed petal or leaf shape from (0, 0) to (0, -length)
@@ -167,7 +167,7 @@ export function BackgroundMotif({
 }) {
   const Motif = MOTIFS[kind];
   return (
-    <div aria-hidden="true" className={`pointer-events-none select-none absolute -z-10 hidden md:block text-line-strong opacity-50 ${className}`}>
+    <div aria-hidden="true" className={`pointer-events-none select-none absolute -z-10 text-line-strong opacity-30 md:opacity-50 ${className}`}>
       <Motif className="w-full h-full" />
       {children}
     </div>

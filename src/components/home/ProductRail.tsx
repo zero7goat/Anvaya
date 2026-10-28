@@ -63,8 +63,8 @@ export default function ProductRail({
 
   return (
     <section className="relative isolate overflow-hidden section-y" id="product-rail-section" aria-labelledby="product-rail-title">
-      <BackgroundMotif kind="paisley" className="-right-6 top-8 w-32 h-52 -rotate-12" />
-      <BackgroundMotif kind="sprig" className="left-0 bottom-10 w-36 h-96" />
+      <BackgroundMotif kind="paisley" className="-right-4 md:-right-6 top-4 md:top-8 w-20 h-32 md:w-32 md:h-52 -rotate-12" />
+      <BackgroundMotif kind="sprig" className="left-0 bottom-6 md:bottom-10 w-24 h-60 md:w-36 md:h-96" />
       <div className="relative container-page">
         <SectionHeader
           eyebrow="Shop the edit"

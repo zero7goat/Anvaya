@@ -143,8 +143,8 @@ function ProductDetails({
 
   return (
     <div className="relative isolate overflow-hidden bg-canvas text-ink pb-24" id="product-page">
-      <BackgroundMotif kind="sprig" className="left-0 bottom-24 w-32 h-80" />
-      <BackgroundMotif kind="mandala" className="-right-24 bottom-40 w-64 h-64" />
+      <BackgroundMotif kind="sprig" className="left-0 bottom-16 md:bottom-24 w-20 h-52 md:w-32 md:h-80" />
+      <BackgroundMotif kind="mandala" className="-right-16 md:-right-24 bottom-[28rem] md:bottom-40 w-40 h-40 md:w-64 md:h-64" />
       {/* Breadcrumb: Home → Collection → Product */}
       <nav aria-label="Breadcrumb" className="bg-surface border-b border-line py-3">
         <ol className="container-page breadcrumb">
@@ -349,7 +349,7 @@ function ProductDetails({
 
         {/* Reviews */}
         <section id="product-reviews" aria-labelledby="product-reviews-heading" className="relative isolate mt-16 sm:mt-20 pt-10 border-t border-line scroll-mt-28">
-          <BackgroundMotif kind="paisley" className="left-[30%] top-16 w-24 h-40 -rotate-[25deg]" />
+          <BackgroundMotif kind="paisley" className="right-2 md:right-auto md:left-[30%] top-4 md:top-16 w-14 h-24 md:w-24 md:h-40 -rotate-[25deg]" />
           <h2 id="product-reviews-heading" className="heading-card mb-6">
             Customer Reviews
           </h2>
