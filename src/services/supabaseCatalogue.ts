@@ -9,7 +9,9 @@ import { supabase } from "../utils/supabase";
 import { PRODUCT_COLUMNS, rowsToProducts } from "../utils/catalogueRows";
 
 export async function fetchSupabaseCatalogue(signal: AbortSignal): Promise<Product[]> {
-  const { data, error } = await supabase.from("products").select(PRODUCT_COLUMNS).abortSignal(signal);
+  // No automatic retries (they back off for several seconds while shoppers see "Loading…");
+  // on any failure the site falls back to the built-in catalogue straight away
+  const { data, error } = await supabase.from("products").select(PRODUCT_COLUMNS).retry(false).abortSignal(signal);
   if (error) throw new Error(error.message);
   return rowsToProducts(data);
 }
