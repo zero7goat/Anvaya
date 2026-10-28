@@ -4,6 +4,7 @@ import { Product } from "../../types";
 import { productService } from "../../services/productService";
 import ProductCard from "../ProductCard";
 import SectionHeader from "./SectionHeader";
+import { BackgroundMotif } from "../decor/Motifs";
 
 // Catalogue views the product service already supports
 const EDITS = ["Best Sellers", "New Arrivals", "Special Offers"] as const;
@@ -61,8 +62,10 @@ export default function ProductRail({
   if (!active) return null;
 
   return (
-    <section className="section-y" id="product-rail-section" aria-labelledby="product-rail-title">
-      <div className="container-page">
+    <section className="relative isolate overflow-hidden section-y" id="product-rail-section" aria-labelledby="product-rail-title">
+      <BackgroundMotif kind="paisley" className="-right-6 top-8 w-32 h-52 -rotate-12" />
+      <BackgroundMotif kind="sprig" className="left-0 bottom-10 w-36 h-96" />
+      <div className="relative container-page">
         <SectionHeader
           eyebrow="Shop the edit"
           title="The Anvaya Edit"

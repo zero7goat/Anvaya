@@ -10,6 +10,7 @@ import ProductPage from "./components/ProductPage";
 import QuickView from "./components/QuickView";
 import InboxDrawer from "./components/InboxDrawer";
 import LoginModal from "./components/LoginModal";
+import { CartActionsContext } from "./context/CartActionsContext";
 import AdminDashboard from "./components/AdminDashboard";
 
 import { Product, CartItem, Order, CollectionType } from "./types";
@@ -287,6 +288,7 @@ export default function App() {
   // CUSTOMER-FACING STOREFRONT (ANVAYA)
   // -------------------------------------------------------------
   return (
+    <CartActionsContext.Provider value={{ addToCart: handleAddToCart }}>
     <div className="min-h-screen bg-canvas text-ink flex flex-col justify-between select-none font-sans">
       
       {/* Top Header */}
@@ -478,5 +480,6 @@ export default function App() {
       />
 
     </div>
+    </CartActionsContext.Provider>
   );
 }

@@ -13,6 +13,7 @@ import CustomerReviews from "./home/CustomerReviews";
 import BrandStory from "./home/BrandStory";
 import { SITE_IMAGES, HeroSlide } from "../data/imageRegistry";
 import { IMAGE_WIDTHS, responsiveImage } from "../utils/imageSources";
+import { BackgroundMotif } from "./decor/Motifs";
 
 interface HeroProps {
   onExploreClick: () => void;
@@ -223,8 +224,10 @@ export default function Hero({
       {/* ------------------------------------------------------------- */}
       {/* SECTION 2: OUR COLLECTIONS (2 ARCHED JHAROKHA CARDS) */}
       {/* ------------------------------------------------------------- */}
-      <section className="w-full section-y" id="our-collections-section">
-        <div className="container-page">
+      <section className="relative isolate overflow-hidden w-full section-y" id="our-collections-section">
+        <BackgroundMotif kind="mandala" className="-left-24 top-10 w-72 h-72" />
+        <BackgroundMotif kind="mandala" className="-right-28 bottom-6 w-80 h-80" />
+        <div className="relative container-page">
           
           {/* Section Heading: Centered uppercase serif matching wireframe */}
           <p className="eyebrow text-center mb-2">Shop by collection</p>

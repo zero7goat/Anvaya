@@ -11,6 +11,7 @@ import {
   isPlainLeftClick,
 } from "../utils/productDisplay";
 import QuickViewButton from "./QuickViewButton";
+import { useQuickAdd } from "./QuickAddToCart";
 import ProductImage from "./ProductImage";
 import { getProductImage } from "../data/imageRegistry";
 
@@ -26,12 +27,33 @@ interface ProductCardProps {
 /**
  * Shared product card. The card is a real link to the product page (so it works
  * with the keyboard, middle-click and "open in new tab"); the quick-view eye
- * button sits beside the link, never inside it, so the two never trigger each other.
+ * and quick-add buttons sit beside the link, never inside it, so they never trigger
+ * each other. Hover effects (product-card-* in index.css) move the card, never scale it.
  */
 export default function ProductCard({ product, variant = "catalogue", onOpen, onQuickView }: ProductCardProps) {
   const isAvailable = productService.getTotalStock(product) > 0;
   const discountPct = getDiscountPercent(product);
   const collectionName = BOUTIQUE_CONFIG.collections[getCollectionKey(product)].name;
+  const quickAdd = useQuickAdd(product);
+
+  // Quick view + quick add, stacked in the photo corner; the size picker covers the photo bottom
+  const actions = (
+    <>
+      <div className="product-card-actions absolute top-2 right-2 z-10 flex flex-col gap-2">
+        <QuickViewButton productName={product.name} onQuickView={() => onQuickView(product)} />
+        {quickAdd.button}
+      </div>
+      <div className="absolute inset-x-0 top-0 aspect-[3/4] overflow-hidden pointer-events-none z-20">
+        {quickAdd.picker}
+      </div>
+    </>
+  );
+  const hoverLayers = (
+    <>
+      <span className="product-card-shade" aria-hidden="true" />
+      <span className="product-card-line" aria-hidden="true" />
+    </>
+  );
 
   const imageLabel = variant === "catalogue" ? collectionName : product.subcategory;
   const metaLabel =
@@ -42,7 +64,7 @@ export default function ProductCard({ product, variant = "catalogue", onOpen, on
   if (variant === "listing") {
     const sizes = getAvailableSizes(product);
     return (
-      <article className="group relative flex flex-col">
+      <article className="product-card group relative flex flex-col">
         <a
           href={getProductPath(product.id)}
           onClick={(e) => {
@@ -54,6 +76,7 @@ export default function ProductCard({ product, variant = "catalogue", onOpen, on
         >
           <div className="relative aspect-[3/4] w-full overflow-hidden bg-surface-muted">
             <ProductImage src={getProductImage(product)} alt={product.name} className="w-full h-full object-cover" />
+            {hoverLayers}
 
             {!isAvailable && (
               <div className="absolute inset-0 bg-black/45 flex items-center justify-center">
@@ -87,17 +110,13 @@ export default function ProductCard({ product, variant = "catalogue", onOpen, on
           </div>
         </a>
 
-        <QuickViewButton
-          productName={product.name}
-          onQuickView={() => onQuickView(product)}
-          className="absolute top-2 right-2"
-        />
+        {actions}
       </article>
     );
   }
 
   return (
-    <article className="group relative bg-surface overflow-hidden flex flex-col anvaya-card-hover">
+    <article className="product-card group relative bg-surface overflow-hidden flex flex-col anvaya-card-hover">
       <a
         href={getProductPath(product.id)}
         onClick={(e) => {
@@ -110,6 +129,7 @@ export default function ProductCard({ product, variant = "catalogue", onOpen, on
         {/* Image Section - Clean, borderless presentation */}
         <div className="relative aspect-[3/4] w-full overflow-hidden bg-transparent">
           <ProductImage src={getProductImage(product)} alt={product.name} className="w-full h-full object-cover" />
+          {hoverLayers}
 
           {/* Sold Out Overlay */}
           {!isAvailable && (
@@ -171,11 +191,7 @@ export default function ProductCard({ product, variant = "catalogue", onOpen, on
         </div>
       </a>
 
-      <QuickViewButton
-        productName={product.name}
-        onQuickView={() => onQuickView(product)}
-        className="absolute top-2 right-2"
-      />
+      {actions}
     </article>
   );
 }

@@ -5,6 +5,7 @@ import { BOUTIQUE_CONFIG } from "../config";
 import { productService } from "../services/productService";
 import ProductCard from "./ProductCard";
 import { CLOTHING_SIZES } from "../utils/productDisplay";
+import { BackgroundMotif } from "./decor/Motifs";
 
 interface CollectionPageProps {
   collectionKey: CollectionType;
@@ -182,7 +183,9 @@ export default function CollectionPage({
       </div>
 
       {/* Collection heading: name, with "By Anvaya" directly beneath */}
-      <header className="container-page pt-8 pb-6 sm:pt-10 sm:pb-8">
+      <header className="relative isolate container-page pt-8 pb-6 sm:pt-10 sm:pb-8">
+        <BackgroundMotif kind="paisley" className="right-6 lg:right-16 top-4 w-28 h-44 rotate-[20deg]" />
+        <BackgroundMotif kind="mandala" className="right-40 lg:right-52 top-10 w-24 h-24" />
         <h1 className="heading-title sm:text-4xl">{collectionInfo.name}</h1>
         <span className="eyebrow block mt-1.5 tracking-[0.28em]">{collectionInfo.byline}</span>
         <p className="text-body mt-4 max-w-2xl">

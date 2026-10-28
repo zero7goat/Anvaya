@@ -17,6 +17,7 @@ import ProductCard from "./ProductCard";
 import ProductReviews from "./ProductReviews";
 import ProductGallery from "./ProductGallery";
 import ProductInfoSections from "./ProductInfoSections";
+import { BackgroundMotif } from "./decor/Motifs";
 
 interface ProductPageProps {
   productId: string;
@@ -141,7 +142,9 @@ function ProductDetails({
   const whatsappLink = orderService.generateWhatsAppProductEnquiryUrl(product.name, selectedSize || undefined);
 
   return (
-    <div className="bg-canvas text-ink pb-24" id="product-page">
+    <div className="relative isolate overflow-hidden bg-canvas text-ink pb-24" id="product-page">
+      <BackgroundMotif kind="sprig" className="left-0 bottom-24 w-32 h-80" />
+      <BackgroundMotif kind="mandala" className="-right-24 bottom-40 w-64 h-64" />
       {/* Breadcrumb: Home → Collection → Product */}
       <nav aria-label="Breadcrumb" className="bg-surface border-b border-line py-3">
         <ol className="container-page breadcrumb">
@@ -345,7 +348,8 @@ function ProductDetails({
         </div>
 
         {/* Reviews */}
-        <section id="product-reviews" aria-labelledby="product-reviews-heading" className="mt-16 sm:mt-20 pt-10 border-t border-line scroll-mt-28">
+        <section id="product-reviews" aria-labelledby="product-reviews-heading" className="relative isolate mt-16 sm:mt-20 pt-10 border-t border-line scroll-mt-28">
+          <BackgroundMotif kind="paisley" className="left-[30%] top-16 w-24 h-40 -rotate-[25deg]" />
           <h2 id="product-reviews-heading" className="heading-card mb-6">
             Customer Reviews
           </h2>

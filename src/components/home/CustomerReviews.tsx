@@ -4,6 +4,7 @@ import { productService } from "../../services/productService";
 import { getProductImage } from "../../data/imageRegistry";
 import ProductImage from "../ProductImage";
 import SectionHeader from "./SectionHeader";
+import { BackgroundMotif } from "../decor/Motifs";
 
 /**
  * Reviews already left on catalogue products, shown as written (author, rating,
@@ -20,8 +21,10 @@ export default function CustomerReviews({ onProductClick }: { onProductClick: (p
   if (reviews.length === 0) return null;
 
   return (
-    <section className="section-y border-t border-line" id="customer-reviews-section" aria-labelledby="customer-reviews-title">
-      <div className="container-page">
+    <section className="relative isolate overflow-hidden section-y border-t border-line" id="customer-reviews-section" aria-labelledby="customer-reviews-title">
+      <BackgroundMotif kind="mandala" className="-right-24 -top-10 w-72 h-72" />
+      <BackgroundMotif kind="paisley" className="left-6 bottom-6 w-24 h-40 rotate-[160deg]" />
+      <div className="relative container-page">
         <SectionHeader eyebrow="In their words" title="Customer Reviews" id="customer-reviews-title" />
 
         <ul className={`grid gap-4 sm:gap-6 ${reviews.length > 1 ? "md:grid-cols-2" : ""} ${reviews.length > 2 ? "lg:grid-cols-3" : ""}`}>

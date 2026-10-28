@@ -4,6 +4,7 @@ import { productService } from "../../services/productService";
 import { SITE_IMAGES, getProductImage } from "../../data/imageRegistry";
 import ProductImage from "../ProductImage";
 import SectionHeader from "./SectionHeader";
+import { BackgroundMotif } from "../decor/Motifs";
 
 // The styles each collection sells, in display order
 const STYLES: { collection: CollectionType; style: string }[] = [
@@ -38,8 +39,10 @@ export default function ShopByStyle({
   });
 
   return (
-    <section className="section-y border-t border-line" id="shop-by-style-section" aria-labelledby="shop-by-style-title">
-      <div className="container-page">
+    <section className="relative isolate overflow-hidden section-y border-t border-line" id="shop-by-style-section" aria-labelledby="shop-by-style-title">
+      <BackgroundMotif kind="sprig" className="right-0 top-6 w-32 h-80 -scale-x-100" />
+      <BackgroundMotif kind="mandala" className="-left-20 bottom-4 w-56 h-56" />
+      <div className="relative container-page">
         <SectionHeader eyebrow="Kurtas & sarees" title="Shop by Style" id="shop-by-style-title" />
 
         <ul className="flex lg:grid lg:grid-cols-6 gap-3 sm:gap-4 overflow-x-auto lg:overflow-visible snap-x snap-mandatory -mx-4 px-4 sm:mx-0 sm:px-0 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
