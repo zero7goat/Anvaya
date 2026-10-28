@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { TouchEvent, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { MOTION_TRANSITION } from "../utils/motion";
-import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
+import { SLIDE_VARIANTS } from "../utils/motion";
+import { ArrowRight } from "lucide-react";
 import { BOUTIQUE_CONFIG } from "../config";
 import { CollectionType, Product } from "../types";
 import { productService } from "../services/productService";
@@ -14,6 +14,22 @@ import BrandStory from "./home/BrandStory";
 import { SITE_IMAGES, HeroSlide } from "../data/imageRegistry";
 import { IMAGE_WIDTHS, responsiveImage } from "../utils/imageSources";
 import { BackgroundMotif } from "./decor/Motifs";
+import MobileHero from "./home/MobileHero";
+
+// Below this width the portrait mobile hero replaces the landscape carousel
+const MOBILE_HERO_QUERY = "(max-width: 767px)";
+
+/** True while the viewport is phone-width; read synchronously so only one hero ever loads. */
+function useIsMobile(): boolean {
+  const [matches, setMatches] = useState(() => typeof window !== "undefined" && window.matchMedia(MOBILE_HERO_QUERY).matches);
+  useEffect(() => {
+    const mql = window.matchMedia(MOBILE_HERO_QUERY);
+    const update = () => setMatches(mql.matches);
+    mql.addEventListener("change", update);
+    return () => mql.removeEventListener("change", update);
+  }, []);
+  return matches;
+}
 
 interface HeroProps {
   onExploreClick: () => void;
@@ -76,23 +92,38 @@ export default function Hero({
   onNavigateCollectionStyle,
 }: HeroProps) {
   // Hero carousel
-  const [currentSlide, setCurrentSlide] = useState(0);
+  // direction: 1 = moving to the next slide (slides travel left), -1 = previous
+  const [{ current: currentSlide, direction }, setSlide] = useState({ current: 0, direction: 1 });
+  const touchStartX = useRef<number | null>(null);
   const [isPaused, setIsPaused] = useState(false);
+  const isMobile = useIsMobile();
   const activeFrame = HERO_FRAMES[currentSlide];
-  const goToSlide = (idx: number) => setCurrentSlide((idx + HERO_FRAMES.length) % HERO_FRAMES.length);
+  const goToSlide = (idx: number, dir: number) =>
+    setSlide({ current: (idx + HERO_FRAMES.length) % HERO_FRAMES.length, direction: dir });
+
+  // Touch screens (tablets, touch laptops): swipe left for next, right for previous
+  const onTouchStart = (e: TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+  const onTouchEnd = (e: TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(dx) > 40) goToSlide(currentSlide + (dx < 0 ? 1 : -1), dx < 0 ? 1 : -1);
+  };
 
   // Gentle autoplay; paused while hovered or focused, and off for reduced-motion users
   useEffect(() => {
-    if (isPaused || HERO_FRAMES.length < 2) return;
+    if (isMobile || isPaused || HERO_FRAMES.length < 2) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const timer = setTimeout(() => setCurrentSlide((i) => (i + 1) % HERO_FRAMES.length), HERO_AUTOPLAY_MS);
+    const timer = setTimeout(() => goToSlide(currentSlide + 1, 1), HERO_AUTOPLAY_MS);
     return () => clearTimeout(timer);
-  }, [currentSlide, isPaused]);
+  }, [currentSlide, isPaused, isMobile]);
 
   // Fetch the next slide in the background once the current one has had a head start,
   // so it is ready before autoplay or the arrows show it (no blank frame mid-fade)
   useEffect(() => {
-    if (HERO_FRAMES.length < 2) return;
+    if (isMobile || HERO_FRAMES.length < 2) return;
     const next = HERO_FRAMES[(currentSlide + 1) % HERO_FRAMES.length];
     const timer = setTimeout(() => {
       frameSlides(next).forEach((slide) => {
@@ -107,7 +138,7 @@ export default function Hero({
       });
     }, HERO_PRELOAD_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [currentSlide]);
+  }, [currentSlide, isMobile]);
 
   // Live piece counts shown under each collection arch
   const collectionCounts: Record<CollectionType, number> = {
@@ -127,8 +158,15 @@ export default function Hero({
     <div className="w-full bg-canvas flex flex-col font-sans" id="anvaya-homepage-sections">
       
       {/* ------------------------------------------------------------- */}
-      {/* SECTION 1: HERO CAROUSEL (full-bleed, header overlaid) */}
+      {/* SECTION 1: HERO CAROUSEL (full-bleed, header overlaid); phones get the portrait version */}
       {/* ------------------------------------------------------------- */}
+      {isMobile ? (
+        <MobileHero
+          onExploreClick={onExploreClick}
+          onShopCategory={onSelectCategory}
+          onNavigateCollectionStyle={(col, style) => (onNavigateCollectionStyle ? onNavigateCollectionStyle(col, style) : handleCollectionNav(col))}
+        />
+      ) : (
       <section
         className="relative w-full -mt-14 sm:-mt-16 overflow-hidden select-none bg-maroon-950"
         id="hero-banner-viewport"
@@ -138,19 +176,23 @@ export default function Hero({
         onMouseLeave={() => setIsPaused(false)}
         onFocus={() => setIsPaused(true)}
         onBlur={() => setIsPaused(false)}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
       >
         <div
           onClick={onExploreClick}
           className="relative w-full aspect-[2/1] max-h-[88vh] cursor-pointer"
           title="Explore Handcrafted Indian Ethnic Wear by Anvaya"
         >
-          {/* Slides crossfade inside a fixed-size frame, so changing slides never shifts the layout */}
-          <AnimatePresence initial={false}>
+          {/* Slides move sideways through a fixed-size frame, so changing slides never shifts the layout */}
+          <AnimatePresence initial={false} custom={direction}>
             <motion.div
               key={activeFrame.id}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1, transition: MOTION_TRANSITION.panel }}
-              exit={{ opacity: 0, transition: MOTION_TRANSITION.panel }}
+              custom={direction}
+              variants={SLIDE_VARIANTS}
+              initial="enter"
+              animate="center"
+              exit="exit"
               className="absolute inset-0"
               aria-roledescription="slide"
               aria-label={`${currentSlide + 1} of ${HERO_FRAMES.length}`}
@@ -176,28 +218,6 @@ export default function Hero({
           </AnimatePresence>
         </div>
 
-        {/* Previous / next: square tabs on the edges */}
-        {HERO_FRAMES.length > 1 && (
-          <>
-            <button
-              onClick={() => goToSlide(currentSlide - 1)}
-              aria-label="Previous slide"
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-20 w-7 h-10 sm:w-9 sm:h-12 flex items-center justify-center bg-canvas/90 text-ink hover:bg-canvas transition-colors cursor-pointer"
-              id="hero-prev"
-            >
-              <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-            </button>
-            <button
-              onClick={() => goToSlide(currentSlide + 1)}
-              aria-label="Next slide"
-              className="absolute right-0 top-1/2 -translate-y-1/2 z-20 w-7 h-10 sm:w-9 sm:h-12 flex items-center justify-center bg-canvas/90 text-ink hover:bg-canvas transition-colors cursor-pointer"
-              id="hero-next"
-            >
-              <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
-            </button>
-          </>
-        )}
-
         {/* Slide indicators */}
         <div
           className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 sm:gap-2 z-20"
@@ -206,7 +226,7 @@ export default function Hero({
           {HERO_FRAMES.map((frame, idx) => (
             <button
               key={frame.id}
-              onClick={() => goToSlide(idx)}
+              onClick={() => goToSlide(idx, idx >= currentSlide ? 1 : -1)}
               className={`transition-all duration-500 cursor-pointer ${
                 currentSlide === idx
                   ? "w-8 sm:w-10 h-1 bg-white rounded-full"
@@ -218,6 +238,7 @@ export default function Hero({
           ))}
         </div>
       </section>
+      )}
 
       <ServiceStrip />
 

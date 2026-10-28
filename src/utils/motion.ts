@@ -24,6 +24,17 @@ export const MOTION_TRANSITION = {
 const EXIT_TRANSITION = { type: "tween", duration: 0.3, ease: MOTION_EASE } as const;
 
 /**
+ * Carousel slide change: the current slide moves out to one side while the next moves
+ * in from the other, like turning pages. Use with <AnimatePresence custom={direction}>,
+ * where direction is 1 for "next" (move left) and -1 for "previous" (move right).
+ */
+export const SLIDE_VARIANTS = {
+  enter: (direction: number) => ({ x: direction >= 0 ? "100%" : "-100%" }),
+  center: { x: "0%", transition: MOTION_TRANSITION.panel },
+  exit: (direction: number) => ({ x: direction >= 0 ? "-100%" : "100%", transition: MOTION_TRANSITION.panel }),
+} as const;
+
+/**
  * Enter/exit presets for every overlay (spread onto a motion element inside
  * AnimatePresence). Exits switch off pointer events immediately, so a closing
  * overlay never blocks the next click.

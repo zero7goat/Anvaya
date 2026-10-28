@@ -853,3 +853,15 @@ img {
     scroll-behavior: auto !important;
   }
 }
+
+/* Mobile hero offers strip: two identical runs scroll left as one seamless loop */
+.offers-marquee {
+  animation: offers-marquee 28s linear infinite;
+}
+@keyframes offers-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .offers-marquee { animation: none; }
+}

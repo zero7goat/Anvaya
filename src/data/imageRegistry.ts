@@ -74,6 +74,38 @@ export const SITE_IMAGES = {
       alt: "Diwali ready: festive fits for every dinner, ritual and gathering",
     },
   ] as HeroSlide[],
+  // Phone-width hero (portrait 3:4 banners with their own printed text), in display order.
+  // Shown instead of heroSlides below tablet width.
+  mobileHeroSlides: [
+    {
+      id: "m-hero-1",
+      kind: "banner",
+      position: "center",
+      image: "https://cdn.shopify.com/s/files/1/0049/3649/9315/files/Hero_Banner_-_01_1.jpg?v=1792479111&width=1080",
+      alt: "Diwali waali deal: festive kurta sets and sarees",
+    },
+    {
+      id: "m-hero-2",
+      kind: "banner",
+      position: "center",
+      image: "https://cdn.shopify.com/s/files/1/0049/3649/9315/files/the_new_festive_edit_3.jpg?v=1792048357&width=1080",
+      alt: "The new festive edit",
+    },
+    {
+      id: "m-hero-3",
+      kind: "banner",
+      position: "center",
+      image: "https://cdn.shopify.com/s/files/1/0049/3649/9315/files/APP_exclusive_1.jpg?v=1781256270&width=1080",
+      alt: "Exclusive festive offer",
+    },
+    {
+      id: "m-hero-4",
+      kind: "banner",
+      position: "center",
+      image: "https://cdn.shopify.com/s/files/1/0049/3649/9315/files/the_festive_fav.jpg?v=1792048357&width=1080",
+      alt: "The festive favourites",
+    },
+  ] as HeroSlide[],
   // Arched "Our Collections" cards and collection metadata
   collectionCovers: {
     alankritha: "https://www.lakshita.com/cdn/shop/files/Artboard_6.jpg_1.jpg?v=1785838580&width=700",

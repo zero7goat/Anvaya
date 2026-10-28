@@ -7,8 +7,10 @@
  *    Plain "/on/demandware.static/" library files on those hosts are served through the
  *    same image service, which returns the identical artwork at the requested width.
  *  - Shopify store-domain "/cdn/shop/" URLs: ?width=<width>.
- * Anything else (local files, cdn.shopify.com product files, which ignore width
- * requests for these images) is returned unchanged with no srcset.
+ *  - cdn.shopify.com "/s/files/" uploads without a size suffix (e.g. the mobile hero
+ *    banners): ?width=<width>. Files already named at a fixed size ("_800x800.jpg",
+ *    the saree photos) ignore width requests, so they are left alone.
+ * Anything else (local files) is returned unchanged with no srcset.
  */
 
 const DW_HOSTS = ["www.rangriti.com", "www.biba.in", "images.biba.in"];
@@ -40,7 +42,11 @@ function getResizer(url: string): Resizer | null {
     };
   }
 
-  if (parsed.pathname.startsWith("/cdn/shop/")) {
+  const resizableShopifyFile =
+    parsed.hostname === "cdn.shopify.com" &&
+    parsed.pathname.startsWith("/s/files/") &&
+    !/_\d+x\d+\.\w+$/.test(parsed.pathname);
+  if (parsed.pathname.startsWith("/cdn/shop/") || resizableShopifyFile) {
     return (width) => {
       const next = new URL(parsed.toString());
       next.searchParams.set("width", String(width));
@@ -76,4 +82,6 @@ export const IMAGE_WIDTHS = {
   product: [360, 540, 720, 900],
   // Full-width hero banners
   hero: [768, 1280, 1920],
+  // Portrait mobile hero banners (source images are 750px wide)
+  mobileHero: [420, 600, 750],
 };

@@ -17,6 +17,23 @@ const STYLES: { collection: CollectionType; style: string }[] = [
 ];
 
 /**
+ * One entry per style: piece count and cover image (a supplied style cover, else the
+ * first product photo in that style, else ""). Shared with the mobile hero style row.
+ */
+export function getStyleCards() {
+  return STYLES.map(({ collection, style }) => {
+    const pieces = productService.getProducts({ collection, subcategory: style });
+    const withImage = pieces.find((p) => getProductImage(p));
+    return {
+      collection,
+      style,
+      count: pieces.length,
+      image: SITE_IMAGES.styleCovers[style] || (withImage ? getProductImage(withImage) : ""),
+    };
+  });
+}
+
+/**
  * Six style cards (three kurta styles, three saree styles). Each opens its collection
  * page with that style selected. Images: a supplied style cover, else the first
  * product photo in that style, else the neutral placeholder. A style with no pieces
@@ -27,16 +44,7 @@ export default function ShopByStyle({
 }: {
   onNavigateCollectionStyle: (collection: CollectionType, style: string) => void;
 }) {
-  const cards = STYLES.map(({ collection, style }) => {
-    const pieces = productService.getProducts({ collection, subcategory: style });
-    const withImage = pieces.find((p) => getProductImage(p));
-    return {
-      collection,
-      style,
-      count: pieces.length,
-      image: SITE_IMAGES.styleCovers[style] || (withImage ? getProductImage(withImage) : ""),
-    };
-  });
+  const cards = getStyleCards();
 
   return (
     <section className="relative isolate overflow-hidden section-y border-t border-line" id="shop-by-style-section" aria-labelledby="shop-by-style-title">
