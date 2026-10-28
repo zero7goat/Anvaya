@@ -1,109 +1,194 @@
 /**
- * ADMIN AUTHENTICATION SERVICE (FRONTEND DEMO LAYER)
- * 
- * IMPORTANT:
- * In this frontend-only phase, this service manages in-memory authentication state
- * for testing the Admin Dashboard interface.
- * 
- * In the production Cloudflare deployment phase:
- * - This will be replaced by a secure HTTP-only cookie session or JWT issued by Cloudflare Workers.
- * - Server-side authorization checks will protect all product mutations and order queries.
- * - Hiding routes or buttons is NOT treated as security.
+ * ADMIN AUTHENTICATION (Supabase Auth)
+ *
+ * Admins sign in with email and password through Supabase Auth. After sign-in,
+ * and again whenever a saved session is restored, the database decides whether
+ * the account is an admin (public.is_admin(), which checks public.admin_users).
+ * Accounts that are not admins are signed straight out.
+ *
+ * Hiding the dashboard is NOT the security boundary: every write to the catalogue
+ * tables is checked by Row Level Security in the database (see
+ * supabase/drafts/products_schema.sql). This service only decides what the
+ * dashboard shows.
+ *
+ * Sessions are stored by Supabase in localStorage and refreshed automatically.
  */
 
-export interface AdminUser {
-  email: string;
-  name: string;
-  role: "admin";
-  isDemoSession: boolean;
+import { isSupabaseConfigured } from "../utils/supabaseConfig.ts";
+
+export type AdminAuthState =
+  | { status: "loading" }
+  | { status: "unavailable" } // Supabase is not configured for this site
+  | { status: "signed-out"; notice?: string }
+  | { status: "admin"; email: string };
+
+// The parts of the Supabase client this service uses (keeps it testable)
+type AuthError = { message: string; status?: number; code?: string } | null;
+type Session = { user: { email?: string | null } } | null;
+
+export interface AdminAuthClient {
+  auth: {
+    getSession(): Promise<{ data: { session: Session }; error: AuthError }>;
+    signInWithPassword(credentials: { email: string; password: string }): Promise<{ data: { session: Session }; error: AuthError }>;
+    signOut(options?: { scope?: "global" | "local" | "others" }): Promise<{ error: AuthError }>;
+    onAuthStateChange(callback: (event: string, session: Session) => void): unknown;
+  };
+  rpc(fn: "is_admin"): PromiseLike<{ data: unknown; error: AuthError }>;
 }
 
-class AuthService {
-  private currentAdmin: AdminUser | null = null;
-  private listeners: ((user: AdminUser | null) => void)[] = [];
+export type SignInResult = { ok: true; error?: undefined } | { ok: false; error: string };
 
-  constructor() {
-    // Check if demo admin session was set previously in current session
-    const saved = sessionStorage.getItem("alankritha_demo_admin");
-    if (saved) {
-      try {
-        this.currentAdmin = JSON.parse(saved);
-      } catch {
-        this.currentAdmin = null;
-      }
-    }
+const NOT_ADMIN = "This account doesn't have admin access.";
+const CHECK_FAILED = "We couldn't confirm admin access. Please try again.";
+
+/** Turns a Supabase Auth error into a message for the sign-in form */
+export const describeSignInError = (error: NonNullable<AuthError>): string => {
+  const text = `${error.code ?? ""} ${error.message}`.toLowerCase();
+  if (text.includes("invalid") && text.includes("credentials")) return "Incorrect email or password.";
+  if (text.includes("email_not_confirmed") || text.includes("not confirmed")) {
+    return "This email address hasn't been confirmed yet.";
+  }
+  if (error.status === 429 || text.includes("rate limit") || text.includes("too many")) {
+    return "Too many sign-in attempts. Please wait a few minutes and try again.";
+  }
+  if (text.includes("fetch") || text.includes("network")) {
+    return "We couldn't reach the sign-in service. Check your connection and try again.";
+  }
+  return "Sign-in failed. Please try again.";
+};
+
+const loadSupabaseClient = async (): Promise<AdminAuthClient | null> => {
+  if (!isSupabaseConfigured()) return null;
+  const { supabase } = await import("../utils/supabase");
+  return supabase as unknown as AdminAuthClient;
+};
+
+export class AuthService {
+  private state: AdminAuthState = { status: "loading" };
+  private listeners = new Set<(state: AdminAuthState) => void>();
+  private client: Promise<AdminAuthClient | null> | null = null;
+  private started = false;
+  private readonly loadClient: () => Promise<AdminAuthClient | null>;
+
+  constructor(loadClient: () => Promise<AdminAuthClient | null> = loadSupabaseClient) {
+    this.loadClient = loadClient;
   }
 
-  public isAuthenticated(): boolean {
-    return this.currentAdmin !== null;
+  public getState(): AdminAuthState {
+    return this.state;
   }
 
-  public getCurrentUser(): AdminUser | null {
-    return this.currentAdmin;
-  }
-
-  /**
-   * Demo Login Simulation:
-   * Accepts any valid email and non-empty password during frontend testing.
-   * Does not hardcode a single secret password or pretend to be cryptographic security.
-   */
-  public async login(email: string, password: string): Promise<{ success: boolean; error?: string }> {
-    // Basic validation
-    if (!email.trim() || !email.includes("@")) {
-      return { success: false, error: "Please provide a valid administrative email address." };
-    }
-
-    if (!password || password.trim().length < 4) {
-      return { success: false, error: "Password must be at least 4 characters long." };
-    }
-
-    // Simulate brief network latency for realistic feel
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    const demoUser: AdminUser = {
-      email: email.trim(),
-      name: email.split("@")[0].toUpperCase(),
-      role: "admin",
-      isDemoSession: true
-    };
-
-    this.currentAdmin = demoUser;
-    sessionStorage.setItem("alankritha_demo_admin", JSON.stringify(demoUser));
-    this.notify();
-
-    return { success: true };
-  }
-
-  /**
-   * Fast-track demo login for review & evaluation
-   */
-  public loginDemo(): void {
-    const demoUser: AdminUser = {
-      email: "owner@alankritha.com",
-      name: "Boutique Owner",
-      role: "admin",
-      isDemoSession: true
-    };
-    this.currentAdmin = demoUser;
-    sessionStorage.setItem("alankritha_demo_admin", JSON.stringify(demoUser));
-    this.notify();
-  }
-
-  public logout(): void {
-    this.currentAdmin = null;
-    sessionStorage.removeItem("alankritha_demo_admin");
-    this.notify();
-  }
-
-  public subscribe(listener: (user: AdminUser | null) => void): () => void {
-    this.listeners.push(listener);
+  public subscribe(listener: (state: AdminAuthState) => void): () => void {
+    this.listeners.add(listener);
     return () => {
-      this.listeners = this.listeners.filter(l => l !== listener);
+      this.listeners.delete(listener);
     };
   }
 
-  private notify(): void {
-    this.listeners.forEach(l => l(this.currentAdmin));
+  /**
+   * Restores a saved session (checking admin access again) and starts listening
+   * for sign-outs, such as an expired session. Safe to call more than once.
+   */
+  public async init(): Promise<void> {
+    if (this.started) return;
+    this.started = true;
+
+    const client = await this.getClient();
+    if (!client) {
+      this.setState({ status: "unavailable" });
+      return;
+    }
+
+    client.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") this.setState({ status: "signed-out" });
+    });
+
+    let session: Session = null;
+    try {
+      const { data, error } = await client.auth.getSession();
+      session = error ? null : data.session;
+    } catch {
+      session = null;
+    }
+    if (!session) {
+      this.setState({ status: "signed-out" });
+      return;
+    }
+
+    const access = await this.checkAdmin(client);
+    if (access === "admin") {
+      this.setState({ status: "admin", email: session.user.email ?? "" });
+    } else {
+      await this.signOutLocally(client);
+      this.setState({ status: "signed-out", notice: access === "denied" ? NOT_ADMIN : CHECK_FAILED });
+    }
+  }
+
+  public async signIn(email: string, password: string): Promise<SignInResult> {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !password) return { ok: false, error: "Enter your email address and password." };
+
+    const client = await this.getClient();
+    if (!client) return { ok: false, error: "Admin sign-in isn't available on this site right now." };
+
+    let signInError: AuthError;
+    let session: Session = null;
+    try {
+      const result = await client.auth.signInWithPassword({ email: trimmedEmail, password });
+      signInError = result.error;
+      session = result.data.session;
+    } catch (error) {
+      signInError = { message: error instanceof Error ? error.message : "network error" };
+    }
+    if (signInError || !session) {
+      return { ok: false, error: signInError ? describeSignInError(signInError) : "Sign-in failed. Please try again." };
+    }
+
+    const access = await this.checkAdmin(client);
+    if (access !== "admin") {
+      await this.signOutLocally(client);
+      this.setState({ status: "signed-out" });
+      return { ok: false, error: access === "denied" ? NOT_ADMIN : CHECK_FAILED };
+    }
+
+    this.setState({ status: "admin", email: session.user.email ?? trimmedEmail });
+    return { ok: true };
+  }
+
+  /** Signs out on this device. The local session is cleared even if the network call fails. */
+  public async signOut(): Promise<void> {
+    const client = await this.getClient();
+    if (client) await this.signOutLocally(client);
+    this.setState({ status: "signed-out" });
+  }
+
+  private async signOutLocally(client: AdminAuthClient): Promise<void> {
+    try {
+      await client.auth.signOut({ scope: "local" });
+    } catch {
+      // Supabase removes the stored session even when the network call fails
+    }
+  }
+
+  // Asks the database whether the signed-in account is an admin
+  private async checkAdmin(client: AdminAuthClient): Promise<"admin" | "denied" | "error"> {
+    try {
+      const { data, error } = await client.rpc("is_admin");
+      if (error) return "error";
+      return data === true ? "admin" : "denied";
+    } catch {
+      return "error";
+    }
+  }
+
+  private getClient(): Promise<AdminAuthClient | null> {
+    this.client ??= this.loadClient().catch(() => null);
+    return this.client;
+  }
+
+  private setState(state: AdminAuthState): void {
+    this.state = state;
+    this.listeners.forEach((listener) => listener(state));
   }
 }
 

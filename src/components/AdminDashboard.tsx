@@ -2,13 +2,13 @@ import React, { useState, useEffect, useMemo } from "react";
 import { 
   Package, ShoppingBag, AlertTriangle, CheckCircle2, Clock, 
   Search, Plus, Edit2, Trash2, Eye, EyeOff, LogOut, ArrowLeft, 
-  Filter, Check, X, RefreshCw, Smartphone, ExternalLink, ShieldCheck,
+  Filter, Check, X, RefreshCw, Smartphone, ExternalLink,
   ChevronRight, Layers, DollarSign, Store
 } from "lucide-react";
 import { Product, Order, CollectionType } from "../types";
 import { productService } from "../services/productService";
 import { orderService } from "../services/orderService";
-import { authService, AdminUser } from "../services/authService";
+import { authService, AdminAuthState } from "../services/authService";
 import { BOUTIQUE_CONFIG } from "../config";
 import ProductImage from "./ProductImage";
 import { FloralSprig } from "./decor/Motifs";
@@ -22,13 +22,21 @@ interface AdminDashboardProps {
 }
 
 export default function AdminDashboard({ onReturnToStore, onProductsChanged }: AdminDashboardProps) {
-  // Authentication state
-  const [currentUser, setCurrentUser] = useState<AdminUser | null>(authService.getCurrentUser());
+  // Authentication state (Supabase Auth; admin access is confirmed by the database)
+  const [authState, setAuthState] = useState<AdminAuthState>(authService.getState());
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = authService.subscribe(setAuthState);
+    setAuthState(authService.getState());
+    authService.init();
+    return unsubscribe;
+  }, []);
 
   // Dashboard active view
   const [activeTab, setActiveTab] = useState<"overview" | "products" | "inventory" | "orders">("overview");
@@ -163,27 +171,22 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
     setLoginLoading(true);
     setLoginError("");
 
-    const res = await authService.login(loginEmail, loginPassword);
+    const res = await authService.signIn(loginEmail, loginPassword);
     setLoginLoading(false);
-    if (res.success) {
-      setCurrentUser(authService.getCurrentUser());
+    if (res.ok) {
+      setLoginPassword("");
       refreshData();
     } else {
-      setLoginError(res.error || "Invalid administrator credentials.");
+      setLoginError(res.error ?? "Sign-in failed. Please try again.");
     }
   };
 
-  // Quick Demo Access for instant testing
-  const handleQuickDemoAccess = () => {
-    authService.loginDemo();
-    setCurrentUser(authService.getCurrentUser());
-    refreshData();
-  };
-
   // Handle Logout
-  const handleLogout = () => {
-    authService.logout();
-    setCurrentUser(null);
+  const handleLogout = async () => {
+    setSigningOut(true);
+    await authService.signOut();
+    setSigningOut(false);
+    setLoginError("");
   };
 
   // Open modal to create a new product
@@ -325,7 +328,19 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
   // =========================================================================
   // VIEW 1: ADMIN LOGIN SCREEN (same look as the customer sign-in page)
   // =========================================================================
-  if (!currentUser) {
+  if (authState.status === "loading") {
+    return (
+      <div className="min-h-[100svh] bg-canvas flex items-center justify-center" role="status" aria-live="polite">
+        <span className="inline-flex items-center gap-2 text-sm text-muted">
+          <RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" />
+          Checking admin sign-in…
+        </span>
+      </div>
+    );
+  }
+
+  if (authState.status !== "admin") {
+    const notice = authState.status === "signed-out" ? authState.notice : undefined;
     return (
       <div className="min-h-[100svh] bg-canvas font-sans text-ink">
         <div className="relative isolate overflow-hidden w-full min-h-[100svh] flex flex-col items-center">
@@ -345,11 +360,17 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
             <h1 className="font-serif text-[1.75rem] sm:text-[2rem] text-ink text-center">Admin Sign In</h1>
             <p className="text-base text-ink/85 mt-3 text-center">Enter your admin email and password</p>
 
+            {authState.status === "unavailable" ? (
+              <div className="status-note status-note-danger mt-7" role="alert">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-danger" />
+                <span>Admin sign-in isn't available on this site right now.</span>
+              </div>
+            ) : (
             <form onSubmit={handleLogin} className="mt-7 space-y-3" id="admin-login-form">
-              {loginError && (
+              {(loginError || notice) && (
                 <div className="status-note status-note-danger" role="alert">
                   <AlertTriangle className="w-4 h-4 shrink-0 text-danger" />
-                  <span>{loginError}</span>
+                  <span>{loginError || notice}</span>
                 </div>
               )}
 
@@ -415,26 +436,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                 )}
               </button>
             </form>
-
-            {/* Prototype notice */}
-            <p className="mt-4 text-center text-sm font-semibold text-ink/70">
-              Demo preview: real admin sign-in is not connected yet. Use Quick Demo Access to look around.
-            </p>
-
-            {/* Demo access, styled like the customer page's switch button */}
-            <div className="flex items-center gap-4 mt-9 mb-4 sm:-mx-5 text-sm uppercase tracking-[0.14em] text-muted" aria-hidden="true">
-              <span className="h-px flex-1 bg-line-strong" />
-              Just testing?
-              <span className="h-px flex-1 bg-line-strong" />
-            </div>
-            <button
-              type="button"
-              onClick={handleQuickDemoAccess}
-              className="w-full h-[56px] sm:h-[60px] flex items-center justify-center gap-3 border border-line-strong bg-surface text-ink text-base transition-colors hover:bg-surface-muted hover:border-ink cursor-pointer"
-            >
-              <ShieldCheck className="w-4 h-4" aria-hidden="true" />
-              Quick Demo Access
-            </button>
+            )}
 
             <button
               type="button"
@@ -532,13 +534,18 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                 <span>View Store</span>
               </button>
 
+              <span className="hidden lg:inline text-xs text-muted max-w-[14rem] truncate" title={authState.email}>
+                {authState.email}
+              </span>
               <button
                 onClick={handleLogout}
+                disabled={signingOut}
+                aria-busy={signingOut}
                 className="btn btn-ghost btn-sm"
-                title="Sign out of admin"
+                title={`Sign out ${authState.email}`}
               >
                 <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Sign Out</span>
+                <span className="hidden sm:inline">{signingOut ? "Signing out…" : "Sign Out"}</span>
               </button>
             </div>
 

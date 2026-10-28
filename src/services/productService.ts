@@ -1,5 +1,6 @@
 import { Product, CollectionType, Review } from "../types";
 import { getSizeOptionsFor } from "../utils/sizes";
+import { isSupabaseConfigured } from "../utils/supabaseConfig";
 
 /**
  * SAMPLE PRODUCT CATALOGUE FOR ANVAYA
@@ -402,8 +403,7 @@ class ProductService {
    * True when Supabase is configured, so the catalogue is read from it at startup
    */
   public usesRemoteCatalogue(): boolean {
-    const env = import.meta.env;
-    return Boolean(env?.VITE_SUPABASE_URL && env?.VITE_SUPABASE_PUBLISHABLE_KEY);
+    return isSupabaseConfigured();
   }
 
   /**
