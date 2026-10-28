@@ -28,8 +28,8 @@ export default function ProductInfoSections({ product }: { product: Product }) {
 
   return (
     <div className="space-y-6" id="product-info-sections">
-      {/* Service badges */}
-      <ul className="flex flex-wrap gap-x-8 gap-y-3 text-sm text-ink">
+      {/* Service badges (phones show these in the service row under the price instead) */}
+      <ul className="hidden md:flex flex-wrap gap-x-8 gap-y-3 text-sm text-ink">
         <li className="flex items-center gap-2.5">
           <Truck className="w-5 h-5 text-maroon-600" strokeWidth={1.5} aria-hidden="true" />
           Free shipping above {formatINR(freeShippingThreshold)}

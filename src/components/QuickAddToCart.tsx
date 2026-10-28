@@ -15,7 +15,8 @@ import { useCartActions } from "../context/CartActionsContext";
  * `button` and `picker` are placed separately by the card: the button in the action
  * column, the picker in an overlay the size of the image.
  */
-export function useQuickAdd(product: Product) {
+// `solid`: a filled square bag button (phone search cards) instead of the round photo-corner one
+export function useQuickAdd(product: Product, { solid = false }: { solid?: boolean } = {}) {
   const cart = useCartActions();
   const [open, setOpen] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -34,9 +35,13 @@ export function useQuickAdd(product: Product) {
       aria-label={`Add ${product.name} to cart`}
       aria-expanded={open}
       title="Add to cart"
-      className={`z-10 inline-flex items-center justify-center w-8 h-8 rounded-full shadow-sm backdrop-blur-sm cursor-pointer transition-[background-color,color,box-shadow,opacity,transform] duration-300 hover:shadow-md ${
-        open ? "bg-maroon-700 text-white" : "bg-white/85 text-ink hover:bg-white hover:text-black"
-      }`}
+      className={
+        solid
+          ? `inline-flex items-center justify-center w-9 h-9 shrink-0 rounded-xs text-white cursor-pointer transition-colors duration-300 ${open ? "bg-maroon-900" : "bg-maroon-700 hover:bg-maroon-800"}`
+          : `z-10 inline-flex items-center justify-center w-8 h-8 rounded-full shadow-sm backdrop-blur-sm cursor-pointer transition-[background-color,color,box-shadow,opacity,transform] duration-300 hover:shadow-md ${
+              open ? "bg-maroon-700 text-white" : "bg-white/85 text-ink hover:bg-white hover:text-black"
+            }`
+      }
     >
       <ShoppingBag className="w-4 h-4" strokeWidth={1.75} aria-hidden="true" />
     </button>

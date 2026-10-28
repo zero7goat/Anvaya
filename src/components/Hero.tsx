@@ -15,21 +15,8 @@ import { SITE_IMAGES, HeroSlide } from "../data/imageRegistry";
 import { IMAGE_WIDTHS, responsiveImage } from "../utils/imageSources";
 import { BackgroundMotif } from "./decor/Motifs";
 import MobileHero from "./home/MobileHero";
+import { useIsMobile } from "../hooks/useIsMobile";
 
-// Below this width the portrait mobile hero replaces the landscape carousel
-const MOBILE_HERO_QUERY = "(max-width: 767px)";
-
-/** True while the viewport is phone-width; read synchronously so only one hero ever loads. */
-function useIsMobile(): boolean {
-  const [matches, setMatches] = useState(() => typeof window !== "undefined" && window.matchMedia(MOBILE_HERO_QUERY).matches);
-  useEffect(() => {
-    const mql = window.matchMedia(MOBILE_HERO_QUERY);
-    const update = () => setMatches(mql.matches);
-    mql.addEventListener("change", update);
-    return () => mql.removeEventListener("change", update);
-  }, []);
-  return matches;
-}
 
 interface HeroProps {
   onExploreClick: () => void;

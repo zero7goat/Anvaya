@@ -1,5 +1,5 @@
 import { Fragment, ReactNode, useEffect, useMemo, useState } from "react";
-import { AlertCircle, Check, ChevronRight, MessageSquare, Minus, Plus, Star } from "lucide-react";
+import { AlertCircle, Banknote, Check, ChevronRight, MapPin, MessageSquare, Minus, Plus, Star, Truck } from "lucide-react";
 import { CollectionType, Product } from "../types";
 import { BOUTIQUE_CONFIG } from "../config";
 import { productService } from "../services/productService";
@@ -16,6 +16,8 @@ import {
 import ProductCard from "./ProductCard";
 import ProductReviews from "./ProductReviews";
 import ProductGallery from "./ProductGallery";
+import MobileProductGallery from "./MobileProductGallery";
+import { useIsMobile } from "../hooks/useIsMobile";
 import ProductInfoSections from "./ProductInfoSections";
 import { BackgroundMotif } from "./decor/Motifs";
 
@@ -93,6 +95,9 @@ function ProductDetails({
   const collection = BOUTIQUE_CONFIG.collections[collectionKey];
 
   const images = useMemo(() => getGalleryImages(product), [product]);
+  // Phones get a full-width swipe gallery; only one gallery is ever rendered
+  const isMobile = useIsMobile();
+  const codEnabled = BOUTIQUE_CONFIG.paymentMethods.some((m) => m.id === "cod" && m.enabled);
   const [selectedSize, setSelectedSize] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [addedSuccess, setAddedSuccess] = useState(false);
@@ -146,7 +151,7 @@ function ProductDetails({
       <BackgroundMotif kind="sprig" className="left-0 bottom-16 md:bottom-24 w-20 h-52 md:w-32 md:h-80" />
       <BackgroundMotif kind="mandala" className="-right-16 md:-right-24 bottom-[28rem] md:bottom-40 w-40 h-40 md:w-64 md:h-64" />
       {/* Breadcrumb: Home → Collection → Product */}
-      <nav aria-label="Breadcrumb" className="bg-surface border-b border-line py-3">
+      <nav aria-label="Breadcrumb" className="hidden md:block bg-surface border-b border-line py-3">
         <ol className="container-page breadcrumb">
           <li>
             <button onClick={onNavigateHome}>
@@ -171,16 +176,77 @@ function ProductDetails({
         </ol>
       </nav>
 
-      <div className="container-page pt-8 sm:pt-12">
+      {isMobile && (
+        <MobileProductGallery
+          images={images}
+          productName={product.name}
+          onBack={() => (window.history.length > 1 ? window.history.back() : onNavigateCollection(collectionKey))}
+          onViewSimilar={() => smoothScroll.scrollToElement(document.getElementById("similar-products-heading"))}
+        />
+      )}
+
+      <div className="container-page pt-4 md:pt-12">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-8 lg:gap-14">
           {/* Gallery: thumbnails, desktop hover zoom and full-screen viewer */}
-          <div className="lg:col-span-7">
-            <ProductGallery images={images} productName={product.name} />
-          </div>
+          {!isMobile && (
+            <div className="lg:col-span-7">
+              <ProductGallery images={images} productName={product.name} />
+            </div>
+          )}
 
           {/* Product information and purchase controls */}
           <section aria-label="Product details" className="lg:col-span-5 space-y-6">
-            <div className="space-y-2">
+            {/* Phone: bold title, MRP / price / % off, rating box, then a service row */}
+            <div className="md:hidden">
+              <h1 className="font-sans text-xl font-semibold leading-snug text-ink">{product.name}</h1>
+              <div className="mt-3 flex items-start justify-between gap-3">
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  {discountPct && (
+                    <span className="text-sm text-muted">
+                      MRP <span className="line-through">{formatINR(product.price)}</span>
+                    </span>
+                  )}
+                  <span className="text-xl font-bold text-ink tabular-nums">{formatINR(getEffectivePrice(product))}</span>
+                  {discountPct && <span className="text-sm font-bold text-maroon-600">{discountPct}% OFF</span>}
+                </div>
+                {reviewCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => smoothScroll.scrollToElement(document.getElementById("product-reviews"))}
+                    aria-label={`Rated ${avgRating.toFixed(1)} out of 5 from ${reviewCount} ${reviewCount === 1 ? "review" : "reviews"}`}
+                    className="shrink-0 flex items-center gap-1 border border-line-strong rounded-xs px-2.5 py-1 text-base font-semibold cursor-pointer"
+                  >
+                    {avgRating.toFixed(1)}
+                    <Star className="w-3.5 h-3.5 fill-success text-success" aria-hidden="true" />
+                  </button>
+                )}
+              </div>
+              <ul className="mt-4 -mx-4 px-2 grid grid-cols-3 border-y border-line bg-surface text-2xs font-semibold text-ink">
+                <li className="flex items-center justify-center gap-1.5 py-3 text-center">
+                  <Truck className="w-4 h-4 shrink-0" strokeWidth={1.6} aria-hidden="true" />
+                  <span>
+                    Free Shipping
+                    <span className="block font-normal text-muted">above {formatINR(BOUTIQUE_CONFIG.freeShippingThreshold)}</span>
+                  </span>
+                </li>
+                <li className="flex items-center justify-center gap-1.5 py-3 text-center border-x border-line">
+                  <MapPin className="w-4 h-4 shrink-0" strokeWidth={1.6} aria-hidden="true" />
+                  <span>Delivering across India</span>
+                </li>
+                {codEnabled && (
+                  <li className="flex items-center justify-center gap-1.5 py-3 text-center">
+                    <Banknote className="w-4 h-4 shrink-0" strokeWidth={1.6} aria-hidden="true" />
+                    <span>
+                      COD Available
+                      <span className="block font-normal text-muted">cash or UPI</span>
+                    </span>
+                  </li>
+                )}
+              </ul>
+            </div>
+
+            {/* Wider screens: eyebrow, serif title, rating, price */}
+            <div className="hidden md:block space-y-2">
               <span className="eyebrow">
                 {collection.name} · {product.category}
                 {product.subcategory ? ` · ${product.subcategory}` : ""}

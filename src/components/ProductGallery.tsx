@@ -232,7 +232,7 @@ function ZoomFrame({
  * Full-screen image viewer. Native scrolling and pinch-zoom work inside it, so it
  * suits touch devices; arrow keys switch images and Escape closes.
  */
-function ImageViewer({
+export function ImageViewer({
   open,
   images,
   index,
