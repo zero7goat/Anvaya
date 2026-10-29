@@ -411,6 +411,7 @@
       border-color var(--motion-fast) var(--motion-ease);
   }
   .chip:hover { border-color: var(--color-line-strong); color: var(--color-ink); }
+  .chip:disabled { opacity: 0.45; cursor: not-allowed; border-color: var(--color-line); color: var(--color-ink-soft); }
   .chip[aria-pressed="true"],
   .chip[data-active="true"] {
     background-color: var(--color-ink);

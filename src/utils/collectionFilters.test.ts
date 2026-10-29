@@ -89,6 +89,8 @@ test("options list only what the products support, with counts", () => {
     { value: "XL", count: 1 },
     { value: "XXL", count: 1 },
   ]);
+  const noXxl = getFilterOptions(kurtas.slice(0, 3), "alankritha", KURTA_STYLES);
+  assert.deepEqual(noXxl.sizes.at(-1), { value: "XXL", count: 0 }, "every kurta size is listed, even with no stock");
   assert.deepEqual(options.colors.map((o) => o.value), ["Red", "Yellow", "Blue"]);
   assert.deepEqual(options.colors.find((o) => o.value === "Red"), { value: "Red", count: 2 });
   assert.deepEqual(options.fabrics.map((o) => o.value), ["Art Silk", "Silk", "Cotton", "Chanderi"]);

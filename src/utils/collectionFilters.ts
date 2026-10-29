@@ -5,7 +5,8 @@ import { CLOTHING_SIZES } from "./sizes.ts";
  * Product filters for a collection page. Every option is worked out from the products
  * themselves, so the page never offers a filter no product can match:
  * - Type: the product's style (subcategory), from the collection's own list.
- * - Size: kurta sizes with stock (sarees are Free Size, so they have no size filter).
+ * - Size: S to XXL for kurtas, matching pieces with that size in stock (sarees are
+ *   Free Size, so they have no size filter).
  * - Colour and fabric: products have no separate fields for these, so they come from
  *   words in the product name only ("Turquoise Cotton ... Kurta"). Descriptions are
  *   left out because they mention trims ("gold zari") that aren't the main colour.
@@ -121,14 +122,18 @@ const countBy = (products: Product[], labels: string[], valuesOf: (p: Product) =
 
 /**
  * What can be filtered in this collection, with how many of its products match each
- * option. Options no product matches are left out (types are always listed, since
- * they are the collection's fixed styles).
+ * option. Options no product matches are left out, except types and kurta sizes,
+ * which are the collection's fixed lists and are always shown.
  */
 export function getFilterOptions(products: Product[], collection: CollectionType, styles: string[]): FilterOptions {
   const prices = products.map(priceOf).filter((price) => Number.isFinite(price) && price > 0);
   return {
     types: styles.map((value) => ({ value, count: products.filter((p) => p.subcategory === value).length })),
-    sizes: collection === "alankritha" ? countBy(products, [...CLOTHING_SIZES], (p) => CLOTHING_SIZES.filter((s) => hasSize(p, s))) : [],
+    // Every kurta size is listed, even with no stock, so the full S–XXL range is always shown
+    sizes:
+      collection === "alankritha"
+        ? CLOTHING_SIZES.map((value) => ({ value, count: products.filter((p) => hasSize(p, value)).length }))
+        : [],
     colors: countBy(products, COLOR_WORDS.map(([label]) => label), getProductColors),
     fabrics: countBy(products, FABRIC_WORDS.map(([label]) => label), getProductFabrics),
     discounts: DISCOUNT_STEPS.map((value) => ({ value, count: products.filter((p) => discountOf(p) >= value).length })).filter(

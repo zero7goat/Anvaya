@@ -183,7 +183,8 @@ export default function CollectionPage({
                 type="button"
                 onClick={() => toggleOption("sizes", value)}
                 aria-pressed={filters.sizes.includes(value)}
-                aria-label={`Size ${value}, ${count} in stock`}
+                disabled={count === 0 && !filters.sizes.includes(value)}
+                aria-label={count === 0 ? `Size ${value}, none in stock` : `Size ${value}, ${count} in stock`}
                 className="chip min-w-10 justify-center"
               >
                 {value}
