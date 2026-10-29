@@ -2,11 +2,8 @@ import { Fragment, Suspense, lazy, useState, useEffect, useRef } from "react";
 import Header from "./components/Header";
 import Hero from "./components/Hero";
 import ProductCatalog from "./components/ProductCatalog";
-import CollectionPage from "./components/CollectionPage";
 import Footer from "./components/Footer";
 import CartDrawer from "./components/CartDrawer";
-import ProductPage from "./components/ProductPage";
-import QuickView from "./components/QuickView";
 import { CartActionsContext } from "./context/CartActionsContext";
 
 import { Product, CartItem, Order, CollectionType } from "./types";
@@ -31,6 +28,10 @@ const AdminDashboard = lazy(() => import("./components/AdminDashboard"));
 const CheckoutModal = lazy(() => import("./components/CheckoutModal"));
 const InboxDrawer = lazy(() => import("./components/InboxDrawer"));
 const LoginModal = lazy(() => import("./components/LoginModal"));
+// Collection and product pages, and Quick View, load when first shown
+const CollectionPage = lazy(() => import("./components/CollectionPage"));
+const ProductPage = lazy(() => import("./components/ProductPage"));
+const QuickView = lazy(() => import("./components/QuickView"));
 
 // The cart survives a refresh: only product IDs, sizes and quantities are kept, and
 // they are re-checked against the live catalogue (price, stock) when read back.
@@ -84,6 +85,11 @@ export default function App() {
 
   // Modals & Drawers
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
+  // Quick View loads the first time it is opened, then stays mounted (like the overlays above)
+  const [quickViewLoaded, setQuickViewLoaded] = useState(false);
+  useEffect(() => {
+    if (quickViewProduct) setQuickViewLoaded(true);
+  }, [quickViewProduct]);
   const [isInboxOpen, setIsInboxOpen] = useState<boolean>(false);
   const [isLoginOpen, setIsLoginOpen] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
@@ -280,12 +286,6 @@ export default function App() {
   };
 
   // Review submission
-  const handleNewReview = (updatedProduct: Product) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p))
-    );
-  };
-
   // Buy Now: add to cart and go straight to checkout
   const handleBuyNow = (product: Product, size: string, quantity: number) => {
     handleAddToCart(product, size, quantity);
@@ -373,6 +373,7 @@ export default function App() {
         initial={isFirstRender.current ? false : { opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0, transition: MOTION_TRANSITION.base }}
       >
+        <Suspense fallback={<PageLoading />}>
         {/* VIEW A: DEDICATED ALANKRITHA COLLECTION PAGE (Kurtas only) */}
         {currentView === "collection_alankritha" && (
           <Fragment key={collectionPreset?.id ?? "alankritha"}>
@@ -412,13 +413,13 @@ export default function App() {
             products={products}
             onAddToCart={handleAddToCart}
             onBuyNow={handleBuyNow}
-            onNewReview={handleNewReview}
             onOpenProduct={openProduct}
             onQuickView={openQuickView}
             onNavigateHome={() => navigateTo("store")}
             onNavigateCollection={navigateToCollection}
           />
         )}
+        </Suspense>
 
         {/* VIEW C: MAIN ANVAYA HOMEPAGE */}
         {currentView === "store" && (
@@ -465,15 +466,19 @@ export default function App() {
           ==================================================== */}
 
       {/* Product Quick View (eye icon on product cards) */}
-      <QuickView
-        product={quickViewProduct}
-        onClose={() => setQuickViewProduct(null)}
-        onAddToCart={(product, size, quantity) => {
-          setQuickViewProduct(null);
-          handleAddToCart(product, size, quantity);
-        }}
-        onViewFullDetails={openProduct}
-      />
+      {quickViewLoaded && (
+        <Suspense fallback={null}>
+          <QuickView
+            product={quickViewProduct}
+            onClose={() => setQuickViewProduct(null)}
+            onAddToCart={(product, size, quantity) => {
+              setQuickViewProduct(null);
+              handleAddToCart(product, size, quantity);
+            }}
+            onViewFullDetails={openProduct}
+          />
+        </Suspense>
+      )}
 
       {/* Cart Drawer */}
       <CartDrawer
@@ -536,7 +541,7 @@ export default function App() {
   );
 }
 
-// Shown while a lazily loaded page (the admin dashboard) downloads
+// Shown while a lazily loaded page (admin, collection or product page) downloads
 function PageLoading() {
   return (
     <div className="min-h-screen bg-canvas flex items-center justify-center" role="status" aria-live="polite">

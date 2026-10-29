@@ -98,11 +98,13 @@ export default function Footer({ onSelectCategory, onNavigateCollection, onNavig
                 WhatsApp us
               </a>
             </li>
-            <li id="support-email" className="min-w-0">
-              <a href={`mailto:${BOUTIQUE_CONFIG.supportEmail}`} className={`${linkClass} break-all`}>
-                {BOUTIQUE_CONFIG.supportEmail}
-              </a>
-            </li>
+            {BOUTIQUE_CONFIG.supportEmail && (
+              <li id="support-email" className="min-w-0">
+                <a href={`mailto:${BOUTIQUE_CONFIG.supportEmail}`} className={`${linkClass} break-all`}>
+                  {BOUTIQUE_CONFIG.supportEmail}
+                </a>
+              </li>
+            )}
             <li id="support-hours" className="text-white/60">
               {BOUTIQUE_CONFIG.supportHours}
             </li>
@@ -138,14 +140,16 @@ export default function Footer({ onSelectCategory, onNavigateCollection, onNavig
             >
               <MessageSquare className="w-4 h-4" />
             </a>
-            <a
-              href={`mailto:${BOUTIQUE_CONFIG.supportEmail}`}
-              aria-label="Email us"
-              title="Email us"
-              className="w-8 h-8 inline-flex items-center justify-center bg-white/10 text-white hover:bg-white/20 transition-colors"
-            >
-              <Mail className="w-4 h-4" />
-            </a>
+            {BOUTIQUE_CONFIG.supportEmail && (
+              <a
+                href={`mailto:${BOUTIQUE_CONFIG.supportEmail}`}
+                aria-label="Email us"
+                title="Email us"
+                className="w-8 h-8 inline-flex items-center justify-center bg-white/10 text-white hover:bg-white/20 transition-colors"
+              >
+                <Mail className="w-4 h-4" />
+              </a>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 md:justify-center text-sm">

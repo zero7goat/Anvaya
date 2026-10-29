@@ -49,7 +49,10 @@ export const BOUTIQUE_CONFIG = {
   whatsappNumber: "919620828013",
 
   // Customer Support Contact Details
-  supportEmail: "care@alankrita.com",
+  // OWNER TO SUPPLY: the real ANVAYA support email address. Left empty on purpose (the
+  // old care@alankrita.com belonged to the previous brand); while it is empty the site
+  // hides every email link and offers phone and WhatsApp instead.
+  supportEmail: "" as string,
   supportPhone: "+91 9620828013",
   supportHours: "10:00 AM - 8:00 PM IST",
   storeLocation: "Ballari, Karnataka, India",
@@ -69,12 +72,5 @@ export const BOUTIQUE_CONFIG = {
       enabled: true,
     },
   ],
-
-  // Cloudflare Deployment Architecture Reference (For Future Phase)
-  cloudflare: {
-    pagesFrontend: "anvaya.pages.dev",
-    workersApiBaseUrl: "/api", // Will route through Cloudflare Workers
-    databaseName: "anvaya-d1-prod",
-    r2BucketName: "anvaya-product-media",
-  },
+  // Hosting: static site on Cloudflare Pages; products, stock and orders live in Supabase.
 };

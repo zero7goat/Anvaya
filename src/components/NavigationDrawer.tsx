@@ -148,7 +148,7 @@ export default function NavigationDrawer({
                   <button
                     type="button"
                     onClick={go(onAccount)}
-                    aria-label={currentUser ? `Sign out ${currentUser}` : "Sign in"}
+                    aria-label={currentUser ? `Sign out ${currentUser}` : "Account"}
                     className="btn-icon"
                   >
                     <User className="w-5 h-5" strokeWidth={1.6} />
@@ -206,7 +206,7 @@ export default function NavigationDrawer({
 
               <div className="border-t-8 border-surface-muted bg-surface-muted/60 px-6 sm:px-8 py-6 space-y-1">
                 <PanelLink icon={<User className="w-5 h-5" strokeWidth={1.4} />} onClick={go(onAccount)}>
-                  {currentUser ? `Sign out (${currentUser})` : "Sign in"}
+                  {currentUser ? `Sign out (${currentUser})` : "Account"}
                 </PanelLink>
                 <PanelLink icon={<Inbox className="w-5 h-5" strokeWidth={1.4} />} onClick={go(onInbox)}>
                   Order updates
@@ -215,9 +215,11 @@ export default function NavigationDrawer({
                 <PanelLink icon={<MessageCircle className="w-5 h-5" strokeWidth={1.4} />} href={whatsappUrl}>
                   WhatsApp us
                 </PanelLink>
-                <PanelLink icon={<Mail className="w-5 h-5" strokeWidth={1.4} />} href={`mailto:${BOUTIQUE_CONFIG.supportEmail}`}>
-                  Contact
-                </PanelLink>
+                {BOUTIQUE_CONFIG.supportEmail && (
+                  <PanelLink icon={<Mail className="w-5 h-5" strokeWidth={1.4} />} href={`mailto:${BOUTIQUE_CONFIG.supportEmail}`}>
+                    Contact
+                  </PanelLink>
+                )}
                 <p className="flex items-center gap-4 pt-3 text-sm text-muted">
                   <MapPin className="w-5 h-5 shrink-0" strokeWidth={1.4} aria-hidden="true" />
                   Delivering across India

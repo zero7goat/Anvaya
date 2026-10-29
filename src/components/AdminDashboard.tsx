@@ -10,7 +10,7 @@ import { OVERLAY_MOTION } from "../utils/motion";
 import { useOverlay } from "../hooks/useOverlay";
 import { Product, Order, CollectionType } from "../types";
 import { productService } from "../services/productService";
-import { orderApi, nextPaymentStatus, nextStatuses, type OrderStatus, type PaymentStatus } from "../services/orderApi";
+import { MAX_ORDERS, orderApi, nextPaymentStatus, nextStatuses, type OrderStatus, type PaymentStatus } from "../services/orderApi";
 import { authService, AdminAuthState } from "../services/authService";
 import { catalogueAdmin, SaveResult } from "../services/catalogueAdmin";
 import {
@@ -903,10 +903,11 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
 
                 <div className="pt-6 border-t border-line mt-6">
                   <div className="text-xs text-neutral-500">
-                    <strong>WhatsApp Business:</strong> +91 9620828013
+                    <strong>WhatsApp Business:</strong> {BOUTIQUE_CONFIG.supportPhone}
                   </div>
                   <div className="text-xs text-neutral-500 mt-1">
-                    <strong>Support:</strong> care@alankrita.com
+                    <strong>Support email:</strong>{" "}
+                    {BOUTIQUE_CONFIG.supportEmail || "not set yet (add it to supportEmail in src/config.ts)"}
                   </div>
                 </div>
               </div>
@@ -1294,6 +1295,11 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                   </tbody>
                 </table>
               </div>
+              )}
+              {ordersLoad.status === "ready" && orders.length + ordersLoad.skipped >= MAX_ORDERS && (
+                <p className="px-4 py-3 border-t border-line text-xs text-muted">
+                  Showing the latest {MAX_ORDERS} orders. Older orders are kept in Supabase.
+                </p>
               )}
               {ordersLoad.status === "ready" && ordersLoad.skipped > 0 && (
                 <p className="px-4 py-3 border-t border-line text-xs text-warning">

@@ -29,7 +29,6 @@ interface ProductPageProps {
   products: Product[];
   onAddToCart: (product: Product, size: string, quantity: number) => void;
   onBuyNow: (product: Product, size: string, quantity: number) => void;
-  onNewReview: (updatedProduct: Product, brandReply: string) => void;
   onOpenProduct: (product: Product) => void;
   onQuickView: (product: Product) => void;
   onNavigateHome: () => void;
@@ -43,7 +42,6 @@ export default function ProductPage({
   products,
   onAddToCart,
   onBuyNow,
-  onNewReview,
   onOpenProduct,
   onQuickView,
   onNavigateHome,
@@ -74,7 +72,6 @@ export default function ProductPage({
         products={products}
         onAddToCart={onAddToCart}
         onBuyNow={onBuyNow}
-        onNewReview={onNewReview}
         onOpenProduct={onOpenProduct}
         onQuickView={onQuickView}
         onNavigateHome={onNavigateHome}
@@ -89,7 +86,6 @@ function ProductDetails({
   products,
   onAddToCart,
   onBuyNow,
-  onNewReview,
   onOpenProduct,
   onQuickView,
   onNavigateHome,
@@ -460,7 +456,7 @@ function ProductDetails({
         />
 
         {/* Write a Review, then Customer Reviews, at the end of the page */}
-        <ProductReviews product={product} onNewReview={onNewReview}>
+        <ProductReviews product={product}>
           <BackgroundMotif kind="paisley" className="right-2 md:right-auto md:left-[30%] top-4 md:top-16 w-14 h-24 md:w-24 md:h-40 -rotate-[25deg]" />
         </ProductReviews>
       </div>

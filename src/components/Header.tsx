@@ -180,7 +180,7 @@ export default function Header({
               <button
                 onClick={currentUser ? onLogout : toggleLogin}
                 className="relative p-2.5 text-white hover:text-gold-300 transition-colors cursor-pointer"
-                title={currentUser ? `Signed in as ${currentUser}` : "Sign In / Account"}
+                title={currentUser ? `Signed in as ${currentUser}` : "Account"}
                 aria-label="User Account"
                 id="header-user-btn"
               >

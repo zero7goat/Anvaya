@@ -11,6 +11,18 @@ export default defineConfig(() => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    build: {
+      rollupOptions: {
+        output: {
+          // Libraries change far less often than the site, so they get their own files
+          // that browsers keep cached across deploys
+          manualChunks: {
+            react: ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime', 'scheduler'],
+            motion: ['motion/react'],
+          },
+        },
+      },
+    },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.

@@ -205,6 +205,7 @@ export default function CollectionPage({
             onToggle={(value) => toggleOption("colors", value)}
             swatches={COLOR_SWATCHES}
           />
+          <p className="field-help">Matched from the colour named in each piece's title, so pieces without one aren't listed.</p>
         </FilterSection>
       )}
 
@@ -217,6 +218,7 @@ export default function CollectionPage({
             selected={filters.fabrics}
             onToggle={(value) => toggleOption("fabrics", value)}
           />
+          <p className="field-help">Matched from the fabric named in each piece's title, so pieces without one aren't listed.</p>
         </FilterSection>
       )}
 

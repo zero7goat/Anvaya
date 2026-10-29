@@ -15,10 +15,15 @@ export const orderService = {
    * Same message as the original product-detail modal.
    */
   generateWhatsAppProductEnquiryUrl(productName: string, selectedSize?: string): string {
-    const text = `Namaste ALANKRITHA! I am interested in inquiring about the "${productName}"${
+    const text = `Namaste ${BOUTIQUE_CONFIG.brandName}! I am interested in inquiring about the "${productName}"${
       selectedSize ? ` in ${selectedSize === FREE_SIZE ? FREE_SIZE : `Size "${selectedSize}"`}` : ""
     }. Could you please share more details or photos? Thank you!`;
     return whatsappUrl(text);
+  },
+
+  /** WhatsApp link for sharing feedback about a piece (there is no public review form) */
+  generateWhatsAppFeedbackUrl(productName: string): string {
+    return whatsappUrl(`Namaste ${BOUTIQUE_CONFIG.brandName}! I'd like to share feedback about the "${productName}".`);
   },
 
   /**

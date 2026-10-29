@@ -1,49 +1,36 @@
-import { useEffect, useRef, useState, FormEvent, ReactNode } from "react";
+import { useEffect, useRef, ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { MOTION_TRANSITION, OVERLAY_MOTION } from "../utils/motion";
+import { OVERLAY_MOTION } from "../utils/motion";
 import { BOUTIQUE_CONFIG } from "../config";
 import { FloralSprig } from "./decor/Motifs";
-import { BOX_INPUT, DomeBorder, LabelledBox } from "./AuthFormParts";
-import { X, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2, LogIn, UserPlus } from "lucide-react";
+import { DomeBorder } from "./AuthFormParts";
+import { X, MessageSquare, ShoppingBag } from "lucide-react";
 
 interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAdminLoginSuccess: () => void;
   onClientLoginSuccess: (username: string) => void;
-  // Site footer, shown below the sign-in area
+  // Site footer, shown below the account area
   footer?: ReactNode;
 }
 
 /**
- * Customer sign-in / sign-up. A full-screen, centred single-column view: brand mark
- * at the top, then the form, then the switch to the other view, with floral sprigs at
- * the page edges, a scalloped border along the bottom, then the site footer.
- *
- * Front-end demo only: no account is stored or verified. Admin sign-in is separate
- * and lives on the admin dashboard.
+ * The "Account" page. Customer accounts don't exist yet, so this explains that none is
+ * needed to order, instead of showing a sign-in form that would collect passwords and
+ * store nothing. A full-screen, centred single-column view: brand mark at the top, the
+ * message, floral sprigs at the page edges, a scalloped border, then the site footer.
+ * Admin sign-in is separate and lives on the admin dashboard (/admin).
  */
-export default function LoginModal({
-  isOpen,
-  onClose,
-  onClientLoginSuccess,
-  footer,
-}: LoginModalProps) {
-  const [isSignUp, setIsSignUp] = useState<boolean>(false);
-  const [username, setUsername] = useState<string>("");
-  const [password, setPassword] = useState<string>("");
-  const [email, setEmail] = useState<string>("");
-  const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [errorMsg, setErrorMsg] = useState<string>("");
-  const [successMsg, setSuccessMsg] = useState<string>("");
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const usernameRef = useRef<HTMLInputElement>(null);
+export default function LoginModal({ isOpen, onClose, footer }: LoginModalProps) {
+  const primaryRef = useRef<HTMLButtonElement>(null);
+  const whatsappUrl = `https://wa.me/${BOUTIQUE_CONFIG.whatsappNumber.replace(/\D/g, "")}`;
 
-  // Focus the first field on open, close on Escape, and return focus to the trigger on close
+  // Focus the main action on open, close on Escape, and return focus to the trigger on close
   useEffect(() => {
     if (!isOpen) return;
     const trigger = document.activeElement as HTMLElement | null;
-    const focusTimer = setTimeout(() => usernameRef.current?.focus({ preventScroll: true }), 50);
+    const focusTimer = setTimeout(() => primaryRef.current?.focus({ preventScroll: true }), 50);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
@@ -54,48 +41,6 @@ export default function LoginModal({
       if (trigger && document.contains(trigger)) trigger.focus({ preventScroll: true });
     };
   }, [isOpen]);
-
-  const switchMode = () => {
-    setIsSignUp(!isSignUp);
-    setErrorMsg("");
-    setSuccessMsg("");
-    setShowPassword(false);
-  };
-
-  // After switching views the form re-mounts, so focus its first field once it exists
-  useEffect(() => {
-    if (isOpen) usernameRef.current?.focus({ preventScroll: true });
-  }, [isSignUp]);
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    setErrorMsg("");
-    setSuccessMsg("");
-    setIsLoading(true);
-
-    // Simulate small delay for editorial premium feel
-    setTimeout(() => {
-      setIsLoading(false);
-
-      // Customer login simulation
-      if (isSignUp) {
-        setSuccessMsg(`Welcome to the Alankritha Family! Account created for ${username}.`);
-      } else {
-        setSuccessMsg(`Namaste ${username}! Welcome back to your Alankritha wardrobe.`);
-      }
-      setTimeout(() => {
-        onClientLoginSuccess(username);
-        onClose();
-        setUsername("");
-        setPassword("");
-        setEmail("");
-        setShowPassword(false);
-        setSuccessMsg("");
-      }, 1000);
-    }, 600);
-  };
-
-  const isBusy = isLoading || !!successMsg;
 
   return (
     <AnimatePresence>
@@ -112,13 +57,13 @@ export default function LoginModal({
           <button
             onClick={onClose}
             className="btn-icon fixed top-3 right-3 sm:top-5 sm:right-5 z-10"
-            aria-label="Close sign in"
+            aria-label="Close"
             id="close-login-btn"
           >
             <X className="w-5 h-5" />
           </button>
 
-          {/* Sign-in area fills the first screen; the site footer follows below it */}
+          {/* Message fills the first screen; the site footer follows below it */}
           <div className="min-h-full flex flex-col items-center">
            <div className="relative w-full flex-1 flex flex-col items-center min-h-[100svh]">
             {/* Floral sprigs at the page edges (decorative; smaller and fainter on phones) */}
@@ -133,160 +78,45 @@ export default function LoginModal({
               </span>
             </div>
 
-            {/* Form column, vertically centred in the remaining space */}
             <motion.div
               {...OVERLAY_MOTION.dialog}
-              className="relative w-full max-w-[450px] flex-1 flex flex-col justify-center px-4 pt-10 pb-20"
+              className="relative w-full max-w-[450px] flex-1 flex flex-col justify-center px-4 pt-10 pb-20 text-center"
               id="login-card"
             >
-              <motion.div
-                key={isSignUp ? "sign-up" : "sign-in"}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0, transition: MOTION_TRANSITION.fast }}
+              <h2 id="login-title" className="font-serif text-3xl sm:text-[2rem] text-ink">
+                Your Account
+              </h2>
+              <p className="text-base text-ink/85 mt-3">
+                Customer accounts aren't available yet, and you don't need one to shop.
+              </p>
+              <p className="text-sm text-muted mt-3 leading-relaxed">
+                Add pieces to your bag and check out with Cash on Delivery. Keep the order reference shown after
+                ordering; the boutique contacts you by phone or WhatsApp to confirm.
+              </p>
+
+              <button
+                ref={primaryRef}
+                type="button"
+                onClick={onClose}
+                className="w-full mt-8 h-16 flex items-center justify-center gap-2 bg-maroon-600 text-white text-base font-semibold uppercase tracking-[0.12em] transition-colors hover:bg-maroon-700 cursor-pointer"
+                id="login-continue-btn"
               >
-                <h2 id="login-title" className="font-serif text-3xl sm:text-[2rem] text-ink text-center">
-                  {isSignUp ? "Create an Account" : "Login With Username"}
-                </h2>
-                <p className="text-base text-ink/85 mt-3 text-center">
-                  {isSignUp ? "Create your wardrobe account" : "Please enter your username and password"}
-                </p>
-
-                <form onSubmit={handleSubmit} className="mt-7 space-y-3" id="login-form">
-                  {errorMsg && (
-                    <div className="status-note status-note-danger" role="alert" id="login-error-box">
-                      <AlertCircle className="w-4 h-4 text-danger shrink-0" />
-                      <span>{errorMsg}</span>
-                    </div>
-                  )}
-
-                  {/* Username */}
-                  <LabelledBox label="Username or Email" htmlFor="login-username-input">
-                    <input
-                      ref={usernameRef}
-                      type="text"
-                      required
-                      autoComplete="username"
-                      autoCapitalize="none"
-                      spellCheck={false}
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      placeholder={isSignUp ? "Choose username" : "Enter username"}
-                      className={BOX_INPUT}
-                      id="login-username-input"
-                      disabled={isBusy}
-                    />
-                  </LabelledBox>
-
-                  {/* Email (sign up only) */}
-                  {isSignUp && (
-                    <LabelledBox label="Email Address" htmlFor="login-email-input">
-                      <input
-                        type="email"
-                        required
-                        autoComplete="email"
-                        inputMode="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="name@example.com"
-                        className={BOX_INPUT}
-                        id="login-email-input"
-                        disabled={isBusy}
-                      />
-                    </LabelledBox>
-                  )}
-
-                  {/* Password, with a show/hide toggle */}
-                  <LabelledBox
-                    label="Password"
-                    htmlFor="login-password-input"
-                    action={
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        aria-label={showPassword ? "Hide password" : "Show password"}
-                        aria-pressed={showPassword}
-                        aria-controls="login-password-input"
-                        className="btn-icon btn-icon-sm rounded-xs"
-                        id="login-password-toggle"
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    }
-                  >
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      required
-                      autoComplete={isSignUp ? "new-password" : "current-password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder={isSignUp ? "Create passcode" : "Enter password"}
-                      className={BOX_INPUT}
-                      id="login-password-input"
-                      disabled={isBusy}
-                    />
-                  </LabelledBox>
-
-                  <button
-                    type="submit"
-                    disabled={isBusy}
-                    aria-busy={isLoading}
-                    className="w-full !mt-4 h-16 flex items-center justify-center gap-2 bg-maroon-600 text-white text-base font-semibold uppercase tracking-[0.12em] transition-colors hover:bg-maroon-700 disabled:opacity-70 cursor-pointer disabled:cursor-default"
-                    id="login-submit-btn"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-                        <span>Authenticating...</span>
-                      </>
-                    ) : successMsg ? (
-                      <>
-                        <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
-                        <span>Signed in</span>
-                      </>
-                    ) : (
-                      <span>{isSignUp ? "Register" : "Sign In"}</span>
-                    )}
-                  </button>
-
-                  {successMsg && (
-                    <div className="status-note status-note-success" role="status" id="login-success-box">
-                      <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
-                      <span>{successMsg}</span>
-                    </div>
-                  )}
-                </form>
-
-                <p className="mt-4 text-center text-sm font-semibold text-ink/70" id="login-demo-note">
-                  Demo sign-in: nothing is stored or verified, and you stay signed in only until the page is reloaded.
-                </p>
-
-                {/* Switch between sign in and sign up */}
-                <div
-                  className="flex items-center gap-4 mt-9 mb-4 sm:-mx-5 text-sm uppercase tracking-[0.14em] text-muted"
-                  aria-hidden="true"
-                >
-                  <span className="h-px flex-1 bg-line-strong" />
-                  {isSignUp ? "Have an account?" : "New to Anvaya?"}
-                  <span className="h-px flex-1 bg-line-strong" />
-                </div>
-                <button
-                  type="button"
-                  onClick={switchMode}
-                  disabled={isBusy}
-                  className="w-full h-[60px] flex items-center justify-center gap-3 border border-line-strong text-ink text-base transition-colors hover:bg-surface-muted hover:border-ink disabled:opacity-60 cursor-pointer disabled:cursor-default"
-                  id="login-switch-btn"
-                >
-                  {isSignUp ? (
-                    <LogIn className="w-4 h-4" aria-hidden="true" />
-                  ) : (
-                    <UserPlus className="w-4 h-4" aria-hidden="true" />
-                  )}
-                  {isSignUp ? "Sign in instead" : "Create an account"}
-                </button>
-              </motion.div>
+                <ShoppingBag className="w-4 h-4" aria-hidden="true" />
+                Continue shopping
+              </button>
+              <a
+                href={whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full mt-3 h-[60px] flex items-center justify-center gap-3 border border-line-strong text-ink text-base transition-colors hover:bg-surface-muted hover:border-ink"
+                id="login-whatsapp-link"
+              >
+                <MessageSquare className="w-4 h-4" aria-hidden="true" />
+                Questions? Message us on WhatsApp
+              </a>
             </motion.div>
 
-            {/* Scalloped dome border along the bottom of the sign-in area */}
+            {/* Scalloped dome border along the bottom of the area */}
             <DomeBorder patternId="login-domes" />
            </div>
 

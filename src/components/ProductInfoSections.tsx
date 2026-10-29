@@ -65,11 +65,21 @@ export default function ProductInfoSections({ product }: { product: Product }) {
             Ask on{" "}
             <a href={whatsappUrl} target="_blank" rel="noreferrer" className="link">
               WhatsApp
-            </a>{" "}
-            or email{" "}
-            <a href={`mailto:${supportEmail}`} className="link">
-              {supportEmail}
             </a>
+            {supportEmail ? (
+              <>
+                {" "}
+                or email{" "}
+                <a href={`mailto:${supportEmail}`} className="link">
+                  {supportEmail}
+                </a>
+              </>
+            ) : (
+              <>
+                {" "}
+                or call <a href={phoneHref} className="link">{supportPhone}</a>
+              </>
+            )}
             .
           </p>
         </InfoSection>
@@ -87,7 +97,7 @@ export default function ProductInfoSections({ product }: { product: Product }) {
               <a href={whatsappUrl} target="_blank" rel="noreferrer" className="link">
                 WhatsApp
               </a>{" "}
-              or by email with your order details.
+              or {supportEmail ? "by email" : "by phone"} with your order details.
             </li>
           </ul>
         </InfoSection>
@@ -99,7 +109,7 @@ export default function ProductInfoSections({ product }: { product: Product }) {
             <DetailRow label="Product code">{product.id.toUpperCase()}</DetailRow>
             <DetailRow label="Net quantity">1 piece</DetailRow>
             <DetailRow label="Customer care">
-              {supportPhone} · {supportEmail}
+              {supportEmail ? `${supportPhone} · ${supportEmail}` : supportPhone}
             </DetailRow>
           </dl>
         </InfoSection>
@@ -117,15 +127,17 @@ export default function ProductInfoSections({ product }: { product: Product }) {
           </a>
           , {supportHours}.
         </p>
-        <p className="mt-4 flex items-center gap-2.5 text-sm text-ink/85">
-          <Mail className="w-5 h-5 shrink-0" strokeWidth={1.5} aria-hidden="true" />
-          <span>
-            Email us at{" "}
-            <a href={`mailto:${supportEmail}`} className="underline underline-offset-2 hover:text-maroon-700">
-              {supportEmail}
-            </a>
-          </span>
-        </p>
+        {supportEmail && (
+          <p className="mt-4 flex items-center gap-2.5 text-sm text-ink/85">
+            <Mail className="w-5 h-5 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+            <span>
+              Email us at{" "}
+              <a href={`mailto:${supportEmail}`} className="underline underline-offset-2 hover:text-maroon-700">
+                {supportEmail}
+              </a>
+            </span>
+          </p>
+        )}
       </div>
     </div>
   );

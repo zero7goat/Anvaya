@@ -296,7 +296,7 @@ test("WhatsApp is opened only after the database confirms the order", async () =
   const events: string[] = [];
   const opened: string[] = [];
   const request = { idempotencyKey: KEY, cart: [line("alk-001", "M", 1)], customer: CUSTOMER, expectedTotal: 2519 };
-  const open = (order: { reference?: string }) => {
+  const open = (order: { reference: string }) => {
     events.push("whatsapp");
     opened.push(order.reference);
   };
@@ -391,4 +391,15 @@ test("the shop's advertised shipping matches the database's checkout settings", 
   const fee = Number(/standardShippingFee:\s*(\d+)/.exec(config)?.[1]);
   const values = /values \(true, (\d+), (\d+),/.exec(sql);
   assert.deepEqual([threshold, fee], [Number(values?.[1]), Number(values?.[2])]);
+});
+
+test("the coupons the shop advertises match the database's offers", () => {
+  const sql = readFileSync(new URL("../../supabase/drafts/orders_schema.sql", import.meta.url), "utf8");
+  const shop = readFileSync(new URL("./offerService.ts", import.meta.url), "utf8");
+  const fromSql = [...sql.matchAll(/\('([A-Z0-9]+)', '[^']*', '(percent|flat)', (\d+), (\d+), true\)/g)].map((m) => m.slice(1).join(" "));
+  const fromShop = [...shop.matchAll(/code: "([A-Z0-9]+)", discountValue: (\d+), type: "(percent|flat)", enabled: true, minSpend: (\d+)/g)].map(
+    (m) => `${m[1]} ${m[3]} ${m[2]} ${m[4]}`
+  );
+  assert.equal(fromSql.length, 2);
+  assert.deepEqual(fromShop, fromSql);
 });

@@ -68,18 +68,13 @@ export interface Order {
   total: number;
   // Shown to customers and on WhatsApp: ANV-XXXXXXXXXX. For orders read by an admin,
   // id is the database row id (needed for status changes); otherwise it equals reference.
-  // Every order read from the database has reference and createdAt; they are optional
-  // only for the old Express server (server.ts), which the site doesn't use.
-  reference?: string;
-  createdAt?: string; // ISO timestamp from the database
+  reference: string;
+  createdAt: string; // ISO timestamp from the database
   date: string; // YYYY-MM-DD (India time)
   time: string; // HH:MM (India time)
   paymentMethod: "COD";
   paymentStatus: "COD - Due" | "Paid" | "Refunded";
   status: "Pending" | "Confirmed" | "Shipped" | "Delivered" | "Cancelled" | "Returned";
-  // Used only by server.ts
-  emailContent?: string;
-  whatsappContent?: string;
 }
 
 export interface OfflineSale {

@@ -713,25 +713,7 @@ class ProductService {
     return this.updateProduct(id, { sizeStock: restocked });
   }
 
-  /**
-   * Add a customer review with a templated brand reply (no AI or network calls)
-   */
-  public addReview(id: string, review: { author: string; rating: number; comment: string }): Product | null {
-    const product = this.getProductById(id);
-    if (!product) return null;
-
-    const newReview: Review = {
-      id: `rev-${Date.now()}`,
-      author: review.author,
-      rating: review.rating,
-      comment: review.comment,
-      date: new Date().toISOString().split("T")[0],
-      verified: true,
-      brandReply: `Namaste ${review.author}! Thank you for giving us ${review.rating} stars for the ${product.name}. We are glad you enjoyed our handcrafted pieces.`
-    };
-
-    return this.updateProduct(id, { reviews: [newReview, ...(product.reviews || [])] });
-  }
+  // Reviews are read from the database (product_reviews); only admins can add them there
   // Stock is reserved by the database when an order is placed (public.place_order), never here
 }
 

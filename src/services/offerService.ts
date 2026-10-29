@@ -1,10 +1,12 @@
 import { Offer } from "../types";
 
 /**
- * SAMPLE PROMOTIONAL OFFERS (DEMO STATE)
+ * ADVERTISED COUPONS
  *
- * Mirrors the coupon codes previously served by the Express API so the
- * storefront can validate promo codes entirely in memory.
+ * The codes the shop shows (offers strip) and pre-checks in the bag. Visitors can't
+ * read public.offers (admins only), so the list lives here; it must match that table
+ * (a test compares it with orders_schema.sql). The database alone decides at checkout:
+ * quote_order and place_order apply a code only if public.offers allows it.
  */
 export const INITIAL_SAMPLE_OFFERS: Offer[] = [
   { id: "off-1", title: "Inaugural Store Discount", code: "ALANKRITHA10", discountValue: 10, type: "percent", enabled: true, minSpend: 1500 },

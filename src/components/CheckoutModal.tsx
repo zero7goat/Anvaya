@@ -269,7 +269,7 @@ export default function CheckoutModal({
           <div className="flex items-center space-x-2.5">
             <ShoppingBag className="w-4 h-4 text-gold-300" />
             <h2 id="checkout-title" className="font-serif text-base tracking-[0.18em] uppercase text-white">
-              {successOrder ? "Order Placed" : "Alankritha Checkout"}
+              {successOrder ? "Order Placed" : `${BOUTIQUE_CONFIG.brandName} Checkout`}
             </h2>
           </div>
 
@@ -644,7 +644,9 @@ export default function CheckoutModal({
 
                 {/* Costs Breakdown */}
                 <div className="pt-3 border-t border-line space-y-2 text-xs" aria-live="polite">
-                  {quoteState.status === "loading" && (
+                  {cartItems.length === 0 && <p className="text-muted">Your bag is empty.</p>}
+
+                  {cartItems.length > 0 && quoteState.status === "loading" && (
                     <p className="flex items-center gap-2 text-muted">
                       <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
                       Checking current prices and stock…

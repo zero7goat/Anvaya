@@ -382,7 +382,7 @@ const isNotSetUp = (error: RpcError) =>
 // its transaction was rolled back. Network failures and aborts carry no code.
 const isDatabaseAnswer = (error: RpcError) => Boolean(error.code);
 
-const MAX_ORDERS = 500;
+export const MAX_ORDERS = 500;
 
 export class OrderApi {
   private readonly gateway: () => Promise<OrdersGateway>;
