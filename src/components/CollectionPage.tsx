@@ -1,11 +1,18 @@
-import React, { Fragment, useState, useMemo, ReactNode } from "react";
+import React, { Fragment, useState, useMemo, useRef, useEffect, ReactNode } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown, ChevronRight, Grid3x3, LayoutGrid, Search, SlidersHorizontal, X } from "lucide-react";
 import { Product, CollectionType } from "../types";
 import { BOUTIQUE_CONFIG } from "../config";
 import { productService } from "../services/productService";
 import ProductCard from "./ProductCard";
-import { getSizeOptionsFor } from "../utils/productDisplay";
 import { BackgroundMotif } from "./decor/Motifs";
+import { COLLECTION_STYLES } from "../utils/productRules";
+import { formatINR } from "../utils/productDisplay";
+import { OVERLAY_MOTION } from "../utils/motion";
+import { useOverlay } from "../hooks/useOverlay";
+import {
+  CollectionFilters, FilterOptions, NO_FILTERS, applyCollectionFilters, countActiveFilters, getFilterOptions,
+} from "../utils/collectionFilters";
 
 interface CollectionPageProps {
   collectionKey: CollectionType;
@@ -18,11 +25,28 @@ interface CollectionPageProps {
 }
 
 type SortOption = "newest" | "price-asc" | "price-desc" | "name";
+type ListFilter = "types" | "sizes" | "colors" | "fabrics";
+
+// Swatch shown beside each colour family in the filter
+const COLOR_SWATCHES: Record<string, string> = {
+  Red: "#b3261e",
+  Pink: "#d63384",
+  Orange: "#d9692a",
+  Yellow: "#d4a017",
+  Green: "#2f7d4f",
+  Blue: "#2b5ea8",
+  Purple: "#6f42c1",
+  White: "#f8f6f0",
+  Black: "#1c1c1c",
+  Grey: "#8a8a8a",
+  Beige: "#c8ad8d",
+  Gold: "#c89d56",
+};
 
 /**
- * Collection landing page: compact collection heading, a filter column (a toggled
- * panel on small screens), style chips above the grid, and a toolbar with the
- * result count, grid density and sort.
+ * Collection landing page: compact collection heading, a filter column (a slide-in
+ * drawer on small screens) and a toolbar with the result count, grid density and sort.
+ * The collection's types (kurta cuts / saree weaves) are one of the filters.
  */
 export default function CollectionPage({
   collectionKey,
@@ -35,71 +59,83 @@ export default function CollectionPage({
   const collectionInfo = BOUTIQUE_CONFIG.collections[collectionKey];
   const otherCollectionKey: CollectionType = collectionKey === "alankritha" ? "ayanaa" : "alankritha";
   const otherCollectionInfo = BOUTIQUE_CONFIG.collections[otherCollectionKey];
+  const styles = COLLECTION_STYLES[collectionKey];
 
   // Filtering & Search states
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedSubcategory, setSelectedSubcategory] = useState(initialSubcategory || "All");
-  const [selectedSize, setSelectedSize] = useState("All");
+  const [filters, setFilters] = useState<CollectionFilters>(() => ({
+    ...NO_FILTERS,
+    types: initialSubcategory && styles.includes(initialSubcategory) ? [initialSubcategory] : [],
+  }));
   const [inStockOnly, setInStockOnly] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>("newest");
-  // Presentation only: number of columns on wide screens, and the filter panel on small screens
+  // Presentation only: number of columns on wide screens, and the filter drawer on small screens
   const [density, setDensity] = useState<"comfortable" | "compact">("compact");
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  // Subcategories available based on collection
-  const subcategories = useMemo(() => {
-    if (collectionKey === "alankritha") {
-      return ["All", "Straight Fit", "A-Line", "Anarkali"];
-    } else {
-      return ["All", "Banarasi Silk", "Organza", "Katan Silk"];
-    }
-  }, [collectionKey]);
+  // Every published product in this collection: the filter options come from these
+  const collectionProducts = useMemo(
+    () => productService.getProducts({ collection: collectionKey, includeDisabled: false }),
+    [collectionKey]
+  );
+  const options = useMemo(
+    () => getFilterOptions(collectionProducts, collectionKey, styles),
+    [collectionProducts, collectionKey, styles]
+  );
 
-  // Size filter options: kurtas come in S to XXL. Sarees are Free Size, so they get no size filter.
-  const availableSizes = ["All", ...getSizeOptionsFor(collectionKey === "ayanaa" ? "Sarees" : "Kurtas")];
-  const showSizeFilter = collectionKey !== "ayanaa";
-
-  // Query products strictly for this collection
+  // Search, availability and sort as before, then the filters (which keep the sorted order)
   const products = useMemo(() => {
-    return productService.getProducts({
+    const searched = productService.getProducts({
       collection: collectionKey,
       includeDisabled: false,
-      subcategory: selectedSubcategory !== "All" ? selectedSubcategory : undefined,
-      selectedSize: selectedSize !== "All" ? selectedSize : undefined,
       inStockOnly,
       searchQuery,
       sortBy,
     });
-  }, [collectionKey, selectedSubcategory, selectedSize, inStockOnly, searchQuery, sortBy]);
+    return applyCollectionFilters(searched, filters);
+  }, [collectionKey, inStockOnly, searchQuery, sortBy, filters]);
 
+  const toggleOption = (key: ListFilter, value: string) =>
+    setFilters((current) => ({
+      ...current,
+      [key]: current[key].includes(value) ? current[key].filter((v) => v !== value) : [...current[key], value],
+    }));
 
   // Active filters, shown as removable chips above the grid
+  const priceLabel =
+    filters.priceMin !== null || filters.priceMax !== null
+      ? `${formatINR(filters.priceMin ?? options.priceRange?.min ?? 0)} – ${formatINR(filters.priceMax ?? options.priceRange?.max ?? 0)}`
+      : null;
   const activeFilters: { key: string; label: string; clear: () => void }[] = [
-    ...(selectedSubcategory !== "All"
-      ? [{ key: "style", label: selectedSubcategory, clear: () => setSelectedSubcategory("All") }]
+    ...(["types", "sizes", "colors", "fabrics"] as ListFilter[]).flatMap((key) =>
+      filters[key].map((value) => ({
+        key: `${key}:${value}`,
+        label: key === "sizes" ? `Size ${value}` : value,
+        clear: () => toggleOption(key, value),
+      }))
+    ),
+    ...(filters.minDiscount !== null
+      ? [{ key: "discount", label: `${filters.minDiscount}% off or more`, clear: () => setFilters((f) => ({ ...f, minDiscount: null })) }]
       : []),
-    ...(selectedSize !== "All"
-      ? [{ key: "size", label: `Size ${selectedSize}`, clear: () => setSelectedSize("All") }]
+    ...(priceLabel
+      ? [{ key: "price", label: priceLabel, clear: () => setFilters((f) => ({ ...f, priceMin: null, priceMax: null })) }]
       : []),
     ...(inStockOnly ? [{ key: "stock", label: "In stock", clear: () => setInStockOnly(false) }] : []),
     ...(searchQuery ? [{ key: "search", label: `“${searchQuery}”`, clear: () => setSearchQuery("") }] : []),
   ];
+  const activeCount = countActiveFilters(filters) + (inStockOnly ? 1 : 0) + (searchQuery ? 1 : 0);
 
   const resetFilters = () => {
-    setSelectedSubcategory("All");
-    setSelectedSize("All");
+    setFilters(NO_FILTERS);
     setInStockOnly(false);
     setSearchQuery("");
   };
 
-  // Filter controls, shown in the side column on wide screens and in a toggled panel below the toolbar otherwise
+  const countText = `${products.length} ${products.length === 1 ? "piece" : "pieces"}`;
+
+  // Filter controls, shown in the side column on wide screens and in the drawer otherwise
   const renderFilters = (idPrefix: string) => (
     <>
-      <div className="flex items-center gap-2.5 pb-3 border-b border-line">
-        <SlidersHorizontal className="w-4 h-4 text-ink-soft" aria-hidden="true" />
-        <span className="eyebrow text-ink">Filter</span>
-      </div>
-
       {/* Search */}
       <div className="relative py-4 border-b border-line">
         <label htmlFor={`${idPrefix}-collection-search`} className="sr-only">
@@ -116,20 +152,91 @@ export default function CollectionPage({
         />
       </div>
 
-      {showSizeFilter && (
+      <FilterSection title={collectionKey === "alankritha" ? "Kurta Type" : "Saree Type"}>
+        <CheckboxList
+          idPrefix={`${idPrefix}-type`}
+          legend="Type"
+          options={options.types}
+          selected={filters.types}
+          onToggle={(value) => toggleOption("types", value)}
+        />
+      </FilterSection>
+
+      {options.priceRange && options.priceRange.max > options.priceRange.min && (
+        <FilterSection title="Price">
+          <PriceRange
+            idPrefix={idPrefix}
+            range={options.priceRange}
+            min={filters.priceMin}
+            max={filters.priceMax}
+            onChange={(priceMin, priceMax) => setFilters((f) => ({ ...f, priceMin, priceMax }))}
+          />
+        </FilterSection>
+      )}
+
+      {options.sizes.length > 0 && (
         <FilterSection title="Size">
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Size">
-            {availableSizes.map((sz) => (
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Size (in stock)">
+            {options.sizes.map(({ value, count }) => (
               <button
-                key={sz}
-                onClick={() => setSelectedSize(sz)}
-                aria-pressed={selectedSize === sz}
+                key={value}
+                type="button"
+                onClick={() => toggleOption("sizes", value)}
+                aria-pressed={filters.sizes.includes(value)}
+                aria-label={`Size ${value}, ${count} in stock`}
                 className="chip min-w-10 justify-center"
               >
-                {sz}
+                {value}
               </button>
             ))}
           </div>
+          <p className="field-help">Shows pieces with the size in stock.</p>
+        </FilterSection>
+      )}
+
+      {options.colors.length > 0 && (
+        <FilterSection title="Colour">
+          <CheckboxList
+            idPrefix={`${idPrefix}-colour`}
+            legend="Colour"
+            options={options.colors}
+            selected={filters.colors}
+            onToggle={(value) => toggleOption("colors", value)}
+            swatches={COLOR_SWATCHES}
+          />
+        </FilterSection>
+      )}
+
+      {options.fabrics.length > 0 && (
+        <FilterSection title="Fabric">
+          <CheckboxList
+            idPrefix={`${idPrefix}-fabric`}
+            legend="Fabric"
+            options={options.fabrics}
+            selected={filters.fabrics}
+            onToggle={(value) => toggleOption("fabrics", value)}
+          />
+        </FilterSection>
+      )}
+
+      {options.discounts.length > 0 && (
+        <FilterSection title="Discount">
+          <fieldset className="space-y-2">
+            <legend className="sr-only">Discount</legend>
+            {[{ value: null as number | null, count: collectionProducts.length }, ...options.discounts].map(({ value, count }) => (
+              <label key={value ?? "any"} className="flex items-center gap-2 text-xs text-ink-soft cursor-pointer select-none">
+                <input
+                  type="radio"
+                  name={`${idPrefix}-discount`}
+                  checked={filters.minDiscount === value}
+                  onChange={() => setFilters((f) => ({ ...f, minDiscount: value }))}
+                  className="checkbox"
+                />
+                <span className="flex-1">{value === null ? "Any" : `${value}% off or more`}</span>
+                {value !== null && <span className="text-muted tabular-nums">{count}</span>}
+              </label>
+            ))}
+          </fieldset>
         </FilterSection>
       )}
 
@@ -197,40 +304,43 @@ export default function CollectionPage({
         </p>
       </header>
 
-      <div className="container-page lg:grid lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-10">
+      <div className="container-page lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-10">
         {/* Filter column (wide screens) */}
         <aside aria-label="Filters" className="hidden lg:block">
-          <div className="lg:sticky lg:top-32">{renderFilters("desktop")}</div>
+          <div className="lg:sticky lg:top-32 lg:max-h-[calc(100vh-9rem)] lg:overflow-y-auto overscroll-contain pr-1">
+            <div className="flex items-center justify-between gap-2.5 pb-3 border-b border-line">
+              <span className="flex items-center gap-2.5">
+                <SlidersHorizontal className="w-4 h-4 text-ink-soft" aria-hidden="true" />
+                <span className="eyebrow text-ink">Filter</span>
+              </span>
+              {activeCount > 0 && (
+                <button type="button" onClick={resetFilters} className="link text-xs">
+                  Clear all
+                </button>
+              )}
+            </div>
+            {renderFilters("desktop")}
+          </div>
         </aside>
 
         <section aria-label={`${collectionInfo.name} products`} className="min-w-0">
-          {/* Style chips: the collection's own styles only */}
-          <div className="-mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto overscroll-x-contain">
-            <div className="flex gap-2 pb-1 w-max sm:w-auto sm:flex-wrap" role="group" aria-label="Style">
-              {subcategories.map((sub) => (
-                <button
-                  key={sub}
-                  onClick={() => setSelectedSubcategory(sub)}
-                  aria-pressed={selectedSubcategory === sub}
-                  className="chip whitespace-nowrap"
-                >
-                  {sub === "All" ? `All ${collectionInfo.category}` : sub}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Toolbar: filters toggle (small screens), density, count, sort */}
-          <div className="mt-4 flex items-center gap-3 border-y border-line py-3">
+          {/* Toolbar: filters (small screens), density, count, sort */}
+          <div className="flex items-center gap-3 border-y border-line py-3">
             <button
               type="button"
-              onClick={() => setFiltersOpen((open) => !open)}
+              onClick={() => setFiltersOpen(true)}
               aria-expanded={filtersOpen}
               aria-controls="collection-filters"
+              aria-haspopup="dialog"
               className="btn btn-secondary btn-sm lg:hidden"
             >
               <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
-              Filters{activeFilters.length > 0 && ` (${activeFilters.length})`}
+              Filters
+              {activeCount > 0 && (
+                <span className="badge badge-neutral tabular-nums" aria-label={`${activeCount} active`}>
+                  {activeCount}
+                </span>
+              )}
             </button>
 
             <div className="hidden md:flex items-center gap-1" role="group" aria-label="Grid density">
@@ -257,6 +367,7 @@ export default function CollectionPage({
             <span className="text-xs text-muted" aria-live="polite">
               <span className="font-semibold text-ink tabular-nums">{products.length}</span>{" "}
               {products.length === 1 ? "piece" : "pieces"}
+              {activeCount > 0 && <span className="hidden sm:inline"> of {collectionProducts.length}</span>}
             </span>
 
             <label className="ml-auto flex items-center gap-2">
@@ -275,19 +386,13 @@ export default function CollectionPage({
             </label>
           </div>
 
-          {/* Filter panel (small screens), opened from the toolbar */}
-          {filtersOpen && (
-            <div id="collection-filters" role="region" aria-label="Filters" className="panel p-4 mt-3 lg:hidden">
-              {renderFilters("mobile")}
-            </div>
-          )}
-
           {/* Active filters */}
           {activeFilters.length > 0 && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {activeFilters.map((f) => (
                 <button
                   key={f.key}
+                  type="button"
                   onClick={f.clear}
                   className="chip"
                   aria-label={`Remove filter ${f.label}`}
@@ -296,7 +401,7 @@ export default function CollectionPage({
                   <X className="w-3 h-3" aria-hidden="true" />
                 </button>
               ))}
-              <button onClick={resetFilters} className="link text-xs ml-1">
+              <button type="button" onClick={resetFilters} className="link text-xs ml-1">
                 Clear all
               </button>
             </div>
@@ -307,9 +412,9 @@ export default function CollectionPage({
             <div className="empty-state my-8">
               <h3 className="heading-card mb-2">No matching outfits found</h3>
               <p className="text-sm text-muted max-w-sm mx-auto mb-5">
-                Try adjusting your search query, style filter, or size selection to view available pieces.
+                Try removing a filter or changing your search to see more pieces.
               </p>
-              <button onClick={resetFilters} className="btn btn-primary">
+              <button type="button" onClick={resetFilters} className="btn btn-primary">
                 Clear Filters
               </button>
             </div>
@@ -328,6 +433,17 @@ export default function CollectionPage({
           )}
         </section>
       </div>
+
+      {/* Filter drawer (small screens): filters apply as they change; the footer shows the result */}
+      <FilterDrawer
+        isOpen={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        onReset={resetFilters}
+        canReset={activeCount > 0}
+        countText={countText}
+      >
+        {renderFilters("mobile")}
+      </FilterDrawer>
 
       {/* Sister Collection Referral Banner */}
       <div className="container-page">
@@ -365,5 +481,191 @@ function FilterSection({ title, children }: { title: string; children: ReactNode
       </summary>
       <div className="pb-4">{children}</div>
     </details>
+  );
+}
+
+// Multi-choice list (any ticked option matches), with each option's product count
+function CheckboxList({
+  idPrefix,
+  legend,
+  options,
+  selected,
+  onToggle,
+  swatches,
+}: {
+  idPrefix: string;
+  legend: string;
+  options: FilterOptions["types"];
+  selected: string[];
+  onToggle: (value: string) => void;
+  swatches?: Record<string, string>;
+}) {
+  return (
+    <fieldset className="space-y-2">
+      <legend className="sr-only">{legend}</legend>
+      {options.map(({ value, count }) => {
+        const id = `${idPrefix}-${value.replace(/\W+/g, "-").toLowerCase()}`;
+        return (
+          <div key={value} className="flex items-center gap-2 text-xs text-ink-soft">
+            <input
+              id={id}
+              type="checkbox"
+              checked={selected.includes(value)}
+              onChange={() => onToggle(value)}
+              className="checkbox"
+            />
+            <label htmlFor={id} className="flex-1 flex items-center gap-2 cursor-pointer select-none">
+              {swatches?.[value] && (
+                <span
+                  className="w-3 h-3 rounded-full border border-line-strong shrink-0"
+                  style={{ backgroundColor: swatches[value] }}
+                  aria-hidden="true"
+                />
+              )}
+              <span className="flex-1">{value}</span>
+              <span className="text-muted tabular-nums">
+                {count}
+                <span className="sr-only"> {count === 1 ? "piece" : "pieces"}</span>
+              </span>
+            </label>
+          </div>
+        );
+      })}
+    </fieldset>
+  );
+}
+
+const PRICE_STEP = 100;
+
+// Two-handle price slider over the collection's price range; reaching either end clears that limit
+function PriceRange({
+  idPrefix,
+  range,
+  min,
+  max,
+  onChange,
+}: {
+  idPrefix: string;
+  range: { min: number; max: number };
+  min: number | null;
+  max: number | null;
+  onChange: (min: number | null, max: number | null) => void;
+}) {
+  const low = Math.max(range.min, Math.min(min ?? range.min, range.max));
+  const high = Math.min(range.max, Math.max(max ?? range.max, range.min));
+  const span = range.max - range.min;
+  const percent = (value: number) => ((value - range.min) / span) * 100;
+  const limit = (value: number, edge: number) => (value === edge ? null : value);
+
+  return (
+    <div>
+      <div className="range-dual">
+        <div className="range-dual-track" />
+        <div className="range-dual-fill" style={{ left: `${percent(low)}%`, right: `${100 - percent(high)}%` }} />
+        <input
+          id={`${idPrefix}-price-min`}
+          type="range"
+          min={range.min}
+          max={range.max}
+          step={PRICE_STEP}
+          value={low}
+          onChange={(e) => {
+            const value = Math.min(Number(e.target.value), high);
+            onChange(limit(value, range.min), limit(high, range.max));
+          }}
+          aria-label="Minimum price"
+          aria-valuetext={formatINR(low)}
+        />
+        <input
+          id={`${idPrefix}-price-max`}
+          type="range"
+          min={range.min}
+          max={range.max}
+          step={PRICE_STEP}
+          value={high}
+          onChange={(e) => {
+            const value = Math.max(Number(e.target.value), low);
+            onChange(limit(low, range.min), limit(value, range.max));
+          }}
+          aria-label="Maximum price"
+          aria-valuetext={formatINR(high)}
+        />
+      </div>
+      <div className="mt-2 flex items-center justify-between text-xs text-ink-soft tabular-nums" aria-hidden="true">
+        <span>{formatINR(low)}</span>
+        <span>{formatINR(high)}</span>
+      </div>
+    </div>
+  );
+}
+
+// Slide-in filter panel for small screens. Filters apply as they change; "Show" closes it.
+function FilterDrawer({
+  isOpen,
+  onClose,
+  onReset,
+  canReset,
+  countText,
+  children,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onReset: () => void;
+  canReset: boolean;
+  countText: string;
+  children: ReactNode;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useOverlay(isOpen, onClose, panelRef);
+
+  // The filter column takes over from 1024px, so close the drawer (and its scroll lock) there
+  useEffect(() => {
+    if (!isOpen) return;
+    const wide = window.matchMedia("(min-width: 1024px)");
+    const onChange = () => wide.matches && onClose();
+    onChange();
+    wide.addEventListener("change", onChange);
+    return () => wide.removeEventListener("change", onChange);
+  }, [isOpen]);
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div key="collection-filters" exit={{ pointerEvents: "none" }} className="fixed inset-0 z-50 flex justify-end lg:hidden">
+          <motion.div {...OVERLAY_MOTION.backdrop} className="overlay-backdrop" onClick={onClose} />
+          <motion.div
+            {...OVERLAY_MOTION.drawerRight}
+            ref={panelRef}
+            tabIndex={-1}
+            id="collection-filters"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="collection-filters-title"
+            className="relative z-10 flex flex-col w-full max-w-[400px] h-full bg-surface text-ink shadow-2xl outline-none"
+          >
+            <div className="flex items-center justify-between gap-3 px-5 h-16 border-b border-line shrink-0">
+              <h2 id="collection-filters-title" className="flex items-center gap-2.5 eyebrow text-ink">
+                <SlidersHorizontal className="w-4 h-4 text-ink-soft" aria-hidden="true" />
+                Filter
+              </h2>
+              <button type="button" onClick={onClose} aria-label="Close filters" className="btn-icon -mr-2">
+                <X className="w-5 h-5" strokeWidth={1.6} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto overscroll-contain px-5">{children}</div>
+
+            <div className="flex gap-3 px-5 py-4 border-t border-line shrink-0">
+              <button type="button" onClick={onReset} disabled={!canReset} className="btn btn-secondary flex-1">
+                Clear all
+              </button>
+              <button type="button" onClick={onClose} className="btn btn-primary flex-1">
+                Show {countText}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

@@ -3,8 +3,11 @@ import {
   Package, ShoppingBag, AlertTriangle, CheckCircle2, Clock, 
   Search, Plus, Edit2, Trash2, Eye, EyeOff, LogOut, ArrowLeft, 
   Filter, Check, X, RefreshCw, Smartphone, ExternalLink,
-  ChevronRight, Layers, DollarSign, Store
+  ChevronRight, Layers, DollarSign, Store, Menu
 } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { OVERLAY_MOTION } from "../utils/motion";
+import { useOverlay } from "../hooks/useOverlay";
 import { Product, Order, CollectionType } from "../types";
 import { productService } from "../services/productService";
 import { orderService } from "../services/orderService";
@@ -19,6 +22,8 @@ import { FloralSprig } from "./decor/Motifs";
 import { BOX_INPUT, DomeBorder, LabelledBox } from "./AuthFormParts";
 import { getProductImage } from "../data/imageRegistry";
 import { ALL_SIZES, FREE_SIZE, describeSize, getSizeOptions, getSizeOptionsFor } from "../utils/productDisplay";
+
+type AdminSection = "overview" | "products" | "inventory" | "orders";
 
 interface AdminDashboardProps {
   onReturnToStore: () => void;
@@ -43,7 +48,9 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
   }, []);
 
   // Dashboard active view
-  const [activeTab, setActiveTab] = useState<"overview" | "products" | "inventory" | "orders">("overview");
+  const [activeTab, setActiveTab] = useState<AdminSection>("overview");
+  // Section menu on screens narrower than the header tabs
+  const [sectionMenuOpen, setSectionMenuOpen] = useState(false);
 
   // In-memory data states
   const [products, setProducts] = useState<Product[]>([]);
@@ -525,23 +532,39 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
   // =========================================================================
   // VIEW 2: AUTHENTICATED ADMIN DASHBOARD
   // =========================================================================
+  const sections: { id: AdminSection; label: string; count?: number }[] = [
+    { id: "overview", label: "Overview" },
+    { id: "products", label: "Products", count: products.length },
+    { id: "inventory", label: "Inventory" },
+    { id: "orders", label: "Orders", count: orders.length },
+  ];
+  const activeSection = sections.find((s) => s.id === activeTab) ?? sections[0];
+
+  // Section chosen from the menu: show it from the top
+  const openSection = (id: AdminSection) => {
+    setActiveTab(id);
+    setSectionMenuOpen(false);
+    window.scrollTo({ top: 0 });
+  };
+
   return (
     <div className="min-h-screen bg-canvas text-ink flex flex-col font-sans">
       
       {/* Top Administrative Header */}
       <header className="bg-surface border-b border-line sticky top-0 z-40">
         <div className="container-page">
-          <div className="flex items-center justify-between h-16">
-            
+          <div className="flex items-center justify-between gap-3 h-16">
+
             {/* Brand Title */}
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-3 min-w-0">
               <img
                 src="/images/logo-144.png" width={159} height={144}
                 alt="ANVAYA emblem"
                 className="h-8 w-auto object-contain shrink-0"
                 decoding="async"
               />
-              <div>
+              {/* Wordmark makes room for the section menu on the narrowest phones */}
+              <div className="max-[359px]:sr-only">
                 <span className="font-serif text-lg tracking-[0.18em] text-ink uppercase">
                   ANVAYA
                 </span>
@@ -552,7 +575,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
             </div>
 
             {/* Navigation Tabs */}
-            <nav className="hidden md:inline-flex segmented" role="tablist" aria-label="Dashboard sections">
+            <nav className="hidden lg:inline-flex segmented" role="tablist" aria-label="Dashboard sections">
               <button
                 onClick={() => setActiveTab("overview")}
                 role="tab"
@@ -590,8 +613,22 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
               </button>
             </nav>
 
-            {/* Right: Return to Store & Logout */}
-            <div className="flex items-center space-x-3">
+            {/* Right: section menu (narrower screens), Return to Store & Logout */}
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setSectionMenuOpen(true)}
+                aria-expanded={sectionMenuOpen}
+                aria-controls="admin-section-menu"
+                aria-haspopup="dialog"
+                className="lg:hidden btn btn-secondary btn-sm"
+                id="admin-section-menu-toggle"
+              >
+                <Menu className="w-4 h-4" aria-hidden="true" />
+                <span className="sr-only">Dashboard menu, current section:</span>
+                <span>{activeSection.label}</span>
+              </button>
+
               <button
                 onClick={onReturnToStore}
                 className="hidden sm:inline-flex btn btn-secondary btn-sm"
@@ -601,7 +638,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                 <span>View Store</span>
               </button>
 
-              <span className="hidden lg:inline text-xs text-muted max-w-[14rem] truncate" title={authState.email}>
+              <span className="hidden xl:inline text-xs text-muted max-w-[14rem] truncate" title={authState.email}>
                 {authState.email}
               </span>
               <button
@@ -619,6 +656,24 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
           </div>
         </div>
       </header>
+
+      <AdminSectionMenu
+        isOpen={sectionMenuOpen}
+        onClose={() => setSectionMenuOpen(false)}
+        sections={sections}
+        activeSection={activeTab}
+        onSelect={openSection}
+        email={authState.email}
+        onViewStore={() => {
+          setSectionMenuOpen(false);
+          onReturnToStore();
+        }}
+        onSignOut={() => {
+          setSectionMenuOpen(false);
+          handleLogout();
+        }}
+        signingOut={signingOut}
+      />
 
       {/* Main Content Area */}
       <main className="flex-1 container-page py-8">
@@ -1596,6 +1651,123 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
       )}
 
     </div>
+  );
+}
+
+/**
+ * Slide-in section menu for screens narrower than the header tabs: every dashboard
+ * section, then View Store and Sign Out. Choosing a section closes it; so do the
+ * close button, the backdrop and Escape (focus handling via useOverlay).
+ */
+function AdminSectionMenu({
+  isOpen,
+  onClose,
+  sections,
+  activeSection,
+  onSelect,
+  email,
+  onViewStore,
+  onSignOut,
+  signingOut,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  sections: { id: AdminSection; label: string; count?: number }[];
+  activeSection: AdminSection;
+  onSelect: (id: AdminSection) => void;
+  email: string;
+  onViewStore: () => void;
+  onSignOut: () => void;
+  signingOut: boolean;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useOverlay(isOpen, onClose, panelRef);
+
+  // The header tabs take over from 1024px, so close the menu (and its scroll lock) there
+  useEffect(() => {
+    if (!isOpen) return;
+    const wide = window.matchMedia("(min-width: 1024px)");
+    const onChange = () => wide.matches && onClose();
+    onChange();
+    wide.addEventListener("change", onChange);
+    return () => wide.removeEventListener("change", onChange);
+  }, [isOpen]);
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div key="admin-section-menu" exit={{ pointerEvents: "none" }} className="fixed inset-0 z-50 flex lg:hidden">
+          <motion.div {...OVERLAY_MOTION.backdrop} className="overlay-backdrop" onClick={onClose} />
+          <motion.div
+            {...OVERLAY_MOTION.drawerLeft}
+            ref={panelRef}
+            tabIndex={-1}
+            id="admin-section-menu"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Dashboard menu"
+            className="relative z-10 flex flex-col w-[85%] max-w-[340px] h-full bg-surface text-ink shadow-2xl outline-none"
+          >
+            <div className="flex items-center justify-between gap-3 px-5 h-16 border-b border-line shrink-0">
+              <span className="eyebrow text-ink">Admin Dashboard</span>
+              <button type="button" onClick={onClose} aria-label="Close menu" className="btn-icon -mr-2">
+                <X className="w-5 h-5" strokeWidth={1.6} />
+              </button>
+            </div>
+
+            <nav aria-label="Dashboard sections" className="flex-1 overflow-y-auto overscroll-contain px-3 py-3">
+              <ul className="space-y-1">
+                {sections.map((s) => {
+                  const current = s.id === activeSection;
+                  return (
+                    <li key={s.id}>
+                      <button
+                        type="button"
+                        onClick={() => onSelect(s.id)}
+                        aria-current={current ? "page" : undefined}
+                        className={`w-full flex items-center justify-between gap-3 rounded-xs px-3 py-3 text-left text-sm font-semibold transition-colors ${
+                          current ? "bg-surface-muted text-ink" : "text-ink-soft hover:bg-surface-muted hover:text-ink"
+                        }`}
+                      >
+                        <span>{s.label}</span>
+                        <span className="flex items-center gap-2">
+                          {s.count !== undefined && (
+                            <span className="badge badge-neutral tabular-nums">{s.count}</span>
+                          )}
+                          <ChevronRight className="w-4 h-4 text-muted" aria-hidden="true" />
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </nav>
+
+            <div className="border-t border-line px-5 py-4 space-y-3 shrink-0">
+              <p className="text-xs text-muted truncate" title={email}>
+                Signed in as <span className="text-ink-soft font-semibold">{email}</span>
+              </p>
+              <div className="flex gap-2">
+                <button type="button" onClick={onViewStore} className="btn btn-secondary btn-sm flex-1">
+                  <Store className="w-3.5 h-3.5" />
+                  <span>View Store</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onSignOut}
+                  disabled={signingOut}
+                  aria-busy={signingOut}
+                  className="btn btn-ghost btn-sm flex-1"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>{signingOut ? "Signing out…" : "Sign Out"}</span>
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
