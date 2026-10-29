@@ -1,35 +1,46 @@
 import { useEffect, useRef, useState, FormEvent, useMemo } from "react";
-import { 
-  X, CheckCircle2, AlertCircle, ShoppingBag, Truck, 
-  MessageSquare, ArrowRight, ShieldCheck, Phone, MapPin
+import {
+  X, CheckCircle2, AlertCircle, ShoppingBag, Truck,
+  MessageSquare, ShieldCheck, Loader2
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { CartItem, Order, Product } from "../types";
+import { CartItem, Order } from "../types";
 import { OVERLAY_MOTION } from "../utils/motion";
 import { BOUTIQUE_CONFIG } from "../config";
 import { orderService } from "../services/orderService";
-import { productService } from "../services/productService";
+import {
+  orderApi, describeProblem, newIdempotencyKey, placeOrderThen, toRpcItems,
+  type PlaceOrderResult, type Quote
+} from "../services/orderApi";
 import ProductImage from "./ProductImage";
 import { getProductImage } from "../data/imageRegistry";
-import { offerService } from "../services/offerService";
-import { calculateCartTotals, getUnitPrice } from "../utils/pricing";
 import { useOverlay } from "../hooks/useOverlay";
 import { isValidEmail, isValidPincode, normalizeIndianMobile } from "../utils/validation";
 
 type CheckoutField = "name" | "phone" | "email" | "address" | "city" | "state" | "pincode";
 
+// What the database says this bag costs right now (quote_order). Orders are placed only
+// against a "ready" quote, and the database checks that total again when placing.
+type QuoteState =
+  | { status: "loading" }
+  | { status: "ready"; quote: Quote }
+  | { status: "unavailable"; quote: Quote }
+  | { status: "error"; message: string };
 
 interface CheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
   cartItems: CartItem[];
-  // Coupon chosen in the bag; re-checked here against the cart being ordered
+  // Coupon chosen in the bag; the database decides whether it applies
   appliedPromoCode?: string;
-  onOrderSuccess: (order: Order, updatedProducts: Product[]) => void;
+  // Called only after the database has saved the order
+  onOrderSuccess: (order: Order) => void;
   onOpenInbox: () => void;
   // Called when stock changed underneath the shopper, so the storefront can refresh
   onCatalogueChanged?: () => void;
 }
+
+const formatINR = (amount: number) => `₹${amount.toLocaleString("en-IN")}`;
 
 export default function CheckoutModal({
   isOpen,
@@ -44,6 +55,9 @@ export default function CheckoutModal({
   useOverlay(isOpen, onClose, panelRef);
   // Guards against a second submission while the first is still being placed
   const submittingRef = useRef(false);
+  // One key per checkout attempt, reused when that attempt is retried, so the database
+  // returns the original order instead of placing a second one. Replaced after success.
+  const checkoutKeyRef = useRef<string | null>(null);
   // Recipient Shipping fields
   const [customerName, setCustomerName] = useState<string>("");
   const [customerEmail, setCustomerEmail] = useState<string>("");
@@ -53,34 +67,47 @@ export default function CheckoutModal({
   const [state, setState] = useState<string>("Karnataka");
   const [pincode, setPincode] = useState<string>("");
 
-  // Payment Selection (Defaults to Cash on Delivery)
-  const [paymentMethod, setPaymentMethod] = useState<"COD">("COD");
-
   // Operational states
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>("");
+  // When ordering online failed, offer a WhatsApp message that is clearly not an order
+  const [offerHelp, setOfferHelp] = useState(false);
   // Field that failed validation: highlighted, described by the message, and focused
   const [invalidField, setInvalidField] = useState<CheckoutField | null>(null);
   const [successOrder, setSuccessOrder] = useState<Order | null>(null);
-
-  // Pricing: the same rules as the bag, with the coupon re-checked for this cart
-  const offer = useMemo(
-    () => (appliedPromoCode ? offerService.findActiveOfferByCode(appliedPromoCode) : null),
-    [appliedPromoCode]
-  );
-  const { subtotal, discount: discountAmount, shipping: shippingCost, total: grandTotal, appliedOffer } = calculateCartTotals(
-    cartItems,
-    offer,
-    BOUTIQUE_CONFIG
-  );
+  const [quoteState, setQuoteState] = useState<QuoteState>({ status: "loading" });
+  const quoteRequest = useRef(0);
 
   // A fresh checkout every time it opens (not the previous order's confirmation)
   useEffect(() => {
     if (!isOpen) return;
     setSuccessOrder(null);
     setErrorMsg("");
+    setOfferHelp(false);
     setInvalidField(null);
   }, [isOpen]);
+
+  // Ask the database for the current prices, coupon, shipping and stock whenever the bag
+  // or coupon changes while checkout is open
+  const quoteKey = JSON.stringify([toRpcItems(cartItems), appliedPromoCode ?? null]);
+  const requestQuote = () => {
+    const request = ++quoteRequest.current;
+    setQuoteState({ status: "loading" });
+    orderApi.quote(cartItems, appliedPromoCode).then((result) => {
+      if (request !== quoteRequest.current) return;
+      if (result.ok) setQuoteState({ status: "ready", quote: result.quote });
+      else if (result.kind === "unavailable") setQuoteState({ status: "unavailable", quote: result.quote });
+      else setQuoteState({ status: "error", message: result.message ?? "" });
+    });
+  };
+  useEffect(() => {
+    if (!isOpen || successOrder || cartItems.length === 0) return;
+    requestQuote();
+  }, [isOpen, quoteKey, successOrder]);
+
+  const quote = quoteState.status === "ready" || quoteState.status === "unavailable" ? quoteState.quote : null;
+  const quotedLine = useMemo(() => new Map((quote?.lines ?? []).map((l) => [`${l.productId}|${l.size}`, l])), [quote]);
+  const cartName = (productId: string) => cartItems.find((it) => it.product.id === productId)?.product.name;
 
   const failValidation = (field: CheckoutField, message: string): false => {
     setErrorMsg(message);
@@ -104,7 +131,7 @@ export default function CheckoutModal({
     }
   };
 
-  // Validate form inputs
+  // Validate form inputs (the database checks them again when placing the order)
   const validateForm = (): boolean => {
     setInvalidField(null);
     if (!customerName.trim()) {
@@ -116,7 +143,7 @@ export default function CheckoutModal({
     if (customerEmail.trim() && !isValidEmail(customerEmail)) {
       return failValidation("email", "Please enter a valid email address, or leave it blank.");
     }
-    if (!address.trim()) {
+    if (address.trim().length < 5) {
       return failValidation("address", "Please provide your delivery street address.");
     }
     if (!city.trim()) {
@@ -135,125 +162,99 @@ export default function CheckoutModal({
     return true;
   };
 
-  // WhatsApp Direct Order Action
-  const handleWhatsAppOrder = () => {
-    setErrorMsg("");
-    if (!validateForm()) return;
-
-    const { url } = orderService.generateWhatsAppOrderUrl({
-      customerName: customerName.trim(),
-      customerPhone: customerPhone.trim(),
-      address: address.trim(),
-      city: city.trim(),
-      state: state.trim(),
-      pincode: pincode.trim(),
-      items: cartItems.map(it => ({
-        name: it.product.name,
-        selectedSize: it.selectedSize,
-        quantity: it.quantity,
-        price: getUnitPrice(it.product)
-      })),
-      subtotal,
-      discount: discountAmount,
-      couponCode: appliedOffer?.code,
-      shippingCost,
-      grandTotal
-    });
-
-    // Open WhatsApp in new tab for customer to review and send
-    window.open(url, "_blank", "noopener,noreferrer");
+  // Explain why nothing was placed. The bag is always kept.
+  const showFailure = (result: PlaceOrderResult) => {
+    switch (result.kind) {
+      case "invalid_customer":
+        failValidation(result.field, result.message);
+        return;
+      case "price_changed":
+        setQuoteState({ status: "ready", quote: result.quote });
+        break;
+      case "unavailable":
+        if (result.quote) setQuoteState({ status: "unavailable", quote: result.quote });
+        onCatalogueChanged?.();
+        break;
+      case "idempotency_conflict":
+        checkoutKeyRef.current = null;
+        break;
+      case "not_set_up":
+      case "failed":
+      case "uncertain":
+      case "too_many_pending":
+        setOfferHelp(true);
+        break;
+    }
+    setErrorMsg(result.message ?? "");
   };
 
-  // Confirm Standard Cash on Delivery Order
-  const handleConfirmCodOrder = (e: FormEvent) => {
-    e.preventDefault();
+  // Place the COD order. Only once the database confirms it is the success screen shown,
+  // and only then (when asked) is WhatsApp opened with the saved order.
+  const placeOrder = async (sendOnWhatsApp: boolean) => {
     if (submittingRef.current) return;
     setErrorMsg("");
+    setOfferHelp(false);
     if (!validateForm()) return;
+    if (quoteState.status !== "ready") {
+      setErrorMsg(
+        quoteState.status === "loading"
+          ? "Still checking current prices and stock. Please try again in a moment."
+          : quoteState.status === "error"
+            ? quoteState.message
+            : "Some pieces in your bag aren't available in the quantity chosen. Please update your bag."
+      );
+      return;
+    }
 
     submittingRef.current = true;
     setIsProcessing(true);
-
-    // Brief pause so the button state is visible; everything happens in this browser
-    setTimeout(() => {
-      try {
-        // Reserve stock first: if any piece sold out meanwhile, nothing is ordered
-        const stockReserved = productService.depleteStock(
-          cartItems.map(it => ({
-            productId: it.product.id,
-            selectedSize: it.selectedSize,
-            quantity: it.quantity
-          }))
-        );
-        if (!stockReserved) {
-          setErrorMsg("Some pieces in your bag are no longer available in the quantity chosen. Your bag has been updated; please review it before ordering.");
-          onCatalogueChanged?.();
-          return;
+    checkoutKeyRef.current ??= newIdempotencyKey();
+    const email = customerEmail.trim();
+    try {
+      const result = await placeOrderThen(
+        orderApi,
+        {
+          idempotencyKey: checkoutKeyRef.current,
+          cart: cartItems,
+          customer: {
+            name: customerName.trim(),
+            phone: normalizeIndianMobile(customerPhone) ?? customerPhone.trim(),
+            ...(email ? { email } : {}),
+            address: address.trim(),
+            city: city.trim(),
+            state: state.trim(),
+            pincode: pincode.trim(),
+          },
+          couponCode: appliedPromoCode,
+          expectedTotal: quoteState.quote.total,
+        },
+        (order) => {
+          checkoutKeyRef.current = null;
+          setSuccessOrder(order);
+          onOrderSuccess(order);
+          // May be blocked by the browser; the success screen has the same link
+          if (sendOnWhatsApp) window.open(orderService.whatsAppUrlForOrder(order), "_blank", "noopener,noreferrer");
         }
-
-        const newOrder = orderService.createOrder({
-          customerName: customerName.trim(),
-          customerPhone: normalizeIndianMobile(customerPhone) || customerPhone.trim(),
-          customerEmail: customerEmail.trim(),
-          address: address.trim(),
-          city: city.trim(),
-          state: state.trim(),
-          pincode: pincode.trim(),
-          items: cartItems.map(it => ({
-            productId: it.product.id,
-            name: it.product.name,
-            price: getUnitPrice(it.product),
-            quantity: it.quantity,
-            selectedSize: it.selectedSize
-          })),
-          subtotal,
-          discount: discountAmount,
-          couponCode: appliedOffer?.code,
-          shippingCost,
-          total: grandTotal,
-          paymentMethod: "COD",
-          paymentStatus: "COD - Due",
-          status: "Pending"
-        });
-
-        setSuccessOrder(newOrder);
-        const updatedProducts = productService.getProducts({ includeDisabled: true });
-        onOrderSuccess(newOrder, updatedProducts);
-      } catch {
-        setErrorMsg("Something went wrong while placing your order. Nothing was charged; please try again.");
-      } finally {
-        submittingRef.current = false;
-        setIsProcessing(false);
-      }
-    }, 600);
+      );
+      if (!result.ok) showFailure(result);
+    } catch {
+      setErrorMsg("We couldn't confirm your order. Please try again: if it was saved, you'll get the same order, not a second one.");
+      setOfferHelp(true);
+    } finally {
+      submittingRef.current = false;
+      setIsProcessing(false);
+    }
   };
 
-  // Formatted WhatsApp confirmation link for the success screen
-  const successWhatsAppLink = useMemo(() => {
-    if (!successOrder) return "";
-    const { url } = orderService.generateWhatsAppOrderUrl({
-      customerName: successOrder.customerName,
-      customerPhone: successOrder.customerPhone,
-      address: successOrder.address,
-      city: successOrder.city,
-      state: successOrder.state,
-      pincode: successOrder.pincode,
-      items: successOrder.items.map(it => ({
-        name: it.name,
-        selectedSize: it.selectedSize,
-        quantity: it.quantity,
-        price: it.price
-      })),
-      // The order's own figures: the bag is already empty by now
-      subtotal: successOrder.subtotal ?? successOrder.items.reduce((sum, it) => sum + it.price * it.quantity, 0),
-      shippingCost: successOrder.shippingCost ?? 0,
-      discount: successOrder.discount,
-      couponCode: successOrder.couponCode,
-      grandTotal: successOrder.total,
-      orderId: successOrder.id
-    });
-    return url;
-  }, [successOrder]);
+  const handleConfirmCodOrder = (e: FormEvent) => {
+    e.preventDefault();
+    void placeOrder(false);
+  };
+
+  // WhatsApp link with the saved order's reference and the database's figures
+  const successWhatsAppLink = useMemo(() => (successOrder ? orderService.whatsAppUrlForOrder(successOrder) : ""), [successOrder]);
+
+  const canOrder = quoteState.status === "ready" && cartItems.length > 0 && !isProcessing;
 
   return (
     <AnimatePresence>
@@ -282,7 +283,7 @@ export default function CheckoutModal({
         </div>
 
         {/* ====================================================
-            SUCCESS CONFIRMATION SCREEN
+            SUCCESS CONFIRMATION SCREEN (only after the database saved the order)
             ==================================================== */}
         {successOrder ? (
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-5 sm:p-10 text-center space-y-6">
@@ -298,15 +299,35 @@ export default function CheckoutModal({
                 Dhanyawaad, {successOrder.customerName}!
               </h3>
               <p className="text-sm text-muted mt-2">
-                Your order <strong className="tabular-nums text-ink">#{successOrder.id}</strong> is saved on this device. Send it to the boutique on WhatsApp below so the team can confirm it.
+                Your order <strong className="tabular-nums text-ink">#{successOrder.reference}</strong> is placed and saved with the boutique. Please keep this reference.
               </p>
             </div>
 
-            {/* Order Summary Box */}
+            {/* Order Summary Box (the database's figures) */}
             <div className="max-w-md mx-auto panel-muted p-4 text-left text-xs space-y-2">
-              <div className="flex justify-between font-semibold text-ink border-b border-line pb-2">
+              <ul className="space-y-1 border-b border-line pb-2">
+                {successOrder.items.map((it) => (
+                  <li key={`${it.productId}-${it.selectedSize}`} className="flex justify-between gap-3">
+                    <span className="min-w-0 text-ink">
+                      {it.name} <span className="text-muted">· {it.selectedSize} · Qty {it.quantity}</span>
+                    </span>
+                    <span className="shrink-0 tabular-nums">{formatINR(it.price * it.quantity)}</span>
+                  </li>
+                ))}
+              </ul>
+              {successOrder.discount ? (
+                <div className="flex justify-between text-ink-soft">
+                  <span>Coupon {successOrder.couponCode}</span>
+                  <span className="tabular-nums">-{formatINR(successOrder.discount)}</span>
+                </div>
+              ) : null}
+              <div className="flex justify-between text-ink-soft">
+                <span>Delivery</span>
+                <span className="tabular-nums">{successOrder.shippingCost ? formatINR(successOrder.shippingCost) : "Free"}</span>
+              </div>
+              <div className="flex justify-between font-semibold text-ink border-t border-line pt-2">
                 <span>Total Amount Due on Delivery:</span>
-                <span className="price">₹{successOrder.total.toLocaleString("en-IN")}</span>
+                <span className="price">{formatINR(successOrder.total)}</span>
               </div>
               <div className="text-xs text-muted">
                 <strong>Delivery Address:</strong> {successOrder.address}, {successOrder.city}, {successOrder.state} - {successOrder.pincode}
@@ -325,12 +346,21 @@ export default function CheckoutModal({
                 className="btn btn-whatsapp btn-lg btn-block"
               >
                 <MessageSquare className="w-4 h-4 fill-white" />
-                <span>Notify Boutique via WhatsApp</span>
+                <span>Send order details on WhatsApp</span>
               </a>
+              <p className="text-xs text-muted">
+                Optional: the boutique already has your order. Sending it on WhatsApp helps the team confirm it sooner. If you close WhatsApp without sending, your order is still placed; you don't need to order again.
+              </p>
 
               <button
-                onClick={onClose}
+                onClick={onOpenInbox}
                 className="btn btn-secondary btn-block"
+              >
+                View your orders
+              </button>
+              <button
+                onClick={onClose}
+                className="btn btn-ghost btn-block"
               >
                 Continue Shopping
               </button>
@@ -357,7 +387,18 @@ export default function CheckoutModal({
               {errorMsg && (
                 <div className="status-note status-note-danger" role="alert" id="checkout-error">
                   <AlertCircle className="w-4 h-4 shrink-0 text-danger" />
-                  <span>{errorMsg}</span>
+                  <span>
+                    {errorMsg}
+                    {offerHelp && (
+                      <>
+                        {" "}
+                        <a href={orderService.generateWhatsAppCheckoutHelpUrl()} target="_blank" rel="noopener noreferrer" className="link">
+                          Ask the boutique on WhatsApp
+                        </a>{" "}
+                        (this is not an order).
+                      </>
+                    )}
+                  </span>
                 </div>
               )}
 
@@ -502,7 +543,7 @@ export default function CheckoutModal({
                 </div>
               </div>
 
-              {/* Payment Method Selector */}
+              {/* Payment Method (Cash on Delivery is the only one) */}
               <div className="pt-2">
                 <h3 className="heading-label mb-2">
                   2. Payment Method
@@ -523,41 +564,40 @@ export default function CheckoutModal({
                 </div>
               </div>
 
-              {/* Dual Order Action Buttons */}
+              {/* Order Action Buttons */}
               <div className="pt-3 space-y-2.5">
                 <div className="lg:hidden flex justify-between items-baseline text-sm font-semibold text-ink">
                   <span>Total payable</span>
-                  <span className="price text-base">₹{grandTotal.toLocaleString("en-IN")}</span>
+                  <span className="price text-base">{quote && quoteState.status === "ready" ? formatINR(quote.total) : "—"}</span>
                 </div>
 
-                {/* 1. WHATSAPP ORDER BUTTON (Prefilled formatted URL) */}
-                <button
-                  type="button"
-                  onClick={handleWhatsAppOrder}
-                  disabled={cartItems.length === 0}
-                  className="btn btn-whatsapp btn-lg btn-block"
-                  title="Generate a formatted WhatsApp message with your items and delivery address"
-                >
-                  <MessageSquare className="w-4 h-4 fill-white" />
-                  <span>Order via WhatsApp (Instant Review)</span>
-                </button>
-
-                {/* 2. CONFIRM COD ORDER BUTTON */}
+                {/* 1. PLACE ORDER (COD) */}
                 <button
                   type="submit"
-                  disabled={isProcessing || cartItems.length === 0}
+                  disabled={!canOrder}
                   aria-busy={isProcessing}
                   className="btn btn-primary btn-lg btn-block"
                 >
                   {isProcessing ? (
-                    <span>Processing Order...</span>
+                    <span>Placing your order…</span>
                   ) : (
                     <span>Confirm Cash on Delivery Order</span>
                   )}
                 </button>
 
+                {/* 2. PLACE ORDER, THEN SEND IT ON WHATSAPP */}
+                <button
+                  type="button"
+                  onClick={() => void placeOrder(true)}
+                  disabled={!canOrder}
+                  className="btn btn-whatsapp btn-lg btn-block"
+                >
+                  <MessageSquare className="w-4 h-4 fill-white" />
+                  <span>Place order &amp; send on WhatsApp</span>
+                </button>
+
                 <p className="text-xs text-muted text-center">
-                  You can review and send the message on WhatsApp, or confirm online with Cash on Delivery.
+                  Your order is saved with the boutique first. WhatsApp opens only after it is saved.
                 </p>
               </div>
 
@@ -576,12 +616,12 @@ export default function CheckoutModal({
                   </span>
                 </div>
 
-                {/* Items List */}
+                {/* Items List (prices as the database quotes them) */}
                 <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
                   {cartItems.map((item) => {
-                    const price = getUnitPrice(item.product);
+                    const quoted = quotedLine.get(`${item.product.id}|${item.selectedSize}`);
                     return (
-                      <div 
+                      <div
                         key={item.product.id + item.selectedSize}
                         className="flex items-center space-x-3 text-xs"
                       >
@@ -594,7 +634,7 @@ export default function CheckoutModal({
                             Size: <strong className="text-ink">{item.selectedSize}</strong> • Qty: {item.quantity}
                           </div>
                           <div className="price text-xs mt-0.5">
-                            ₹{(price * item.quantity).toLocaleString("en-IN")}
+                            {quoted ? formatINR(quoted.lineTotal) : quoteState.status === "loading" ? "…" : "—"}
                           </div>
                         </div>
                       </div>
@@ -603,36 +643,76 @@ export default function CheckoutModal({
                 </div>
 
                 {/* Costs Breakdown */}
-                <div className="pt-3 border-t border-line space-y-2 text-xs">
-                  <div className="flex justify-between text-ink-soft">
-                    <span>Subtotal:</span>
-                    <span className="tabular-nums">₹{subtotal.toLocaleString("en-IN")}</span>
-                  </div>
+                <div className="pt-3 border-t border-line space-y-2 text-xs" aria-live="polite">
+                  {quoteState.status === "loading" && (
+                    <p className="flex items-center gap-2 text-muted">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                      Checking current prices and stock…
+                    </p>
+                  )}
 
-                  {discountAmount > 0 && (
-                    <div className="flex justify-between text-danger">
-                      <span>Promo Discount ({appliedOffer?.code}):</span>
-                      <span className="tabular-nums">-₹{discountAmount.toLocaleString("en-IN")}</span>
+                  {quoteState.status === "error" && (
+                    <div className="space-y-2">
+                      <p className="text-danger">{quoteState.message}</p>
+                      <button type="button" onClick={requestQuote} className="btn btn-secondary btn-sm">
+                        Try again
+                      </button>
                     </div>
                   )}
 
-                  <div className="flex justify-between text-ink-soft">
-                    <span>Delivery Charges:</span>
-                    <span className="tabular-nums">
-                      {shippingCost === 0 ? (
-                        <strong className="badge badge-success">Free Delivery</strong>
-                      ) : (
-                        `₹${shippingCost}`
-                      )}
-                    </span>
-                  </div>
+                  {quoteState.status === "unavailable" && (
+                    <div className="status-note status-note-warning" role="status">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <ul className="space-y-1">
+                        {quoteState.quote.problems.map((p) => (
+                          <li key={`${p.productId}|${p.size}`}>{describeProblem(p, cartName(p.productId))}</li>
+                        ))}
+                        <li>Please update your bag to continue.</li>
+                      </ul>
+                    </div>
+                  )}
 
-                  <div className="pt-3 border-t border-line flex justify-between items-baseline text-xs font-semibold uppercase tracking-[0.12em] text-ink">
-                    <span>Grand Total:</span>
-                    <span className="price text-lg tracking-normal">
-                      ₹{grandTotal.toLocaleString("en-IN")}
-                    </span>
-                  </div>
+                  {quote && (
+                    <>
+                      <div className="flex justify-between text-ink-soft">
+                        <span>Subtotal:</span>
+                        <span className="tabular-nums">{formatINR(quote.subtotal)}</span>
+                      </div>
+
+                      {quote.discount > 0 && (
+                        <div className="flex justify-between text-danger">
+                          <span>Promo Discount ({quote.couponCode}):</span>
+                          <span className="tabular-nums">-{formatINR(quote.discount)}</span>
+                        </div>
+                      )}
+                      {appliedPromoCode && quote.couponStatus === "invalid" && (
+                        <p className="text-muted">Coupon {appliedPromoCode} isn't valid, so no discount is applied.</p>
+                      )}
+                      {appliedPromoCode && quote.couponStatus === "below_min_spend" && (
+                        <p className="text-muted">
+                          Coupon {appliedPromoCode} needs a minimum spend{quote.minimumSpend ? ` of ${formatINR(quote.minimumSpend)}` : ""}, so no discount is applied.
+                        </p>
+                      )}
+
+                      <div className="flex justify-between text-ink-soft">
+                        <span>Delivery Charges:</span>
+                        <span className="tabular-nums">
+                          {quote.shipping === 0 ? (
+                            <strong className="badge badge-success">Free Delivery</strong>
+                          ) : (
+                            formatINR(quote.shipping)
+                          )}
+                        </span>
+                      </div>
+
+                      <div className="pt-3 border-t border-line flex justify-between items-baseline text-xs font-semibold uppercase tracking-[0.12em] text-ink">
+                        <span>Grand Total:</span>
+                        <span className="price text-lg tracking-normal">
+                          {formatINR(quote.total)}
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
               </div>

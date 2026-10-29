@@ -732,26 +732,7 @@ class ProductService {
 
     return this.updateProduct(id, { reviews: [newReview, ...(product.reviews || [])] });
   }
-
-  /**
-   * Atomically reduce size stock when customer checkout completes
-   */
-  public depleteStock(items: { productId: string; selectedSize: string; quantity: number }[]): boolean {
-    for (const item of items) {
-      const prod = this.getProductById(item.productId);
-      if (!prod) return false;
-      const currentStock = prod.sizeStock?.[item.selectedSize] || 0;
-      if (currentStock < item.quantity) {
-        return false;
-      }
-    }
-    for (const item of items) {
-      const prod = this.getProductById(item.productId)!;
-      const newCount = (prod.sizeStock[item.selectedSize] || 0) - item.quantity;
-      this.updateSizeStock(item.productId, item.selectedSize, newCount);
-    }
-    return true;
-  }
+  // Stock is reserved by the database when an order is placed (public.place_order), never here
 }
 
 export const productService = new ProductService();

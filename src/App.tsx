@@ -11,7 +11,6 @@ import { CartActionsContext } from "./context/CartActionsContext";
 
 import { Product, CartItem, Order, CollectionType } from "./types";
 import { productService } from "./services/productService";
-import { orderService } from "./services/orderService";
 import { BOUTIQUE_CONFIG } from "./config";
 import { smoothScroll } from "./utils/smoothScroll";
 import { getProductPath } from "./utils/productDisplay";
@@ -102,12 +101,10 @@ export default function App() {
     if (catalogueReady) isFirstRender.current = false;
   }, [catalogueReady]);
 
-  // Load products & orders from repository
+  // Load the products currently held by the catalogue service
   const loadStorefrontData = () => {
     const activeProducts = productService.getProducts({ includeDisabled: false });
-    const activeOrders = orderService.getOrders();
     setProducts(activeProducts);
-    setOrders(activeOrders);
   };
 
   // Keep the cart in step with the live catalogue: restore the saved cart once the
@@ -296,10 +293,13 @@ export default function App() {
     setIsCheckoutOpen(true);
   };
 
-  // Order success callback
-  const handleOrderSuccess = (order: Order, updatedProducts: Product[]) => {
+  // Called once the database has saved an order: the bag is emptied, and the catalogue is
+  // read again so the storefront shows the stock the order reserved
+  const handleOrderSuccess = (order: Order) => {
     setCart([]);
-    setProducts(updatedProducts.filter(p => p.status === "enabled"));
+    productService.reloadCatalogue().then((reloaded) => {
+      if (reloaded) loadStorefrontData();
+    });
     setOrders((prev) => [order, ...prev]);
     setMyOrderIds((prev) => [order.id, ...prev]);
     setUnreadCount((prev) => prev + 1);
@@ -499,7 +499,11 @@ export default function App() {
             appliedPromoCode={appliedPromoCode}
             onOrderSuccess={handleOrderSuccess}
             onOpenInbox={handleOpenInbox}
-            onCatalogueChanged={loadStorefrontData}
+            onCatalogueChanged={() => {
+              productService.reloadCatalogue().then((reloaded) => {
+                if (reloaded) loadStorefrontData();
+              });
+            }}
           />
         )}
 

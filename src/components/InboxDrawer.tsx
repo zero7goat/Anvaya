@@ -24,9 +24,10 @@ const STATUS_TONE: Record<Order["status"], string> = {
 };
 
 /**
- * "Order updates": the shopper's own orders from this visit, newest first, with the
- * pieces, sizes, total and current status. Nothing is emailed; each order can be sent
- * to the boutique on WhatsApp, which is how the boutique receives it.
+ * "Order updates": the orders the shopper placed during this visit, newest first, as
+ * the database confirmed them (reference, pieces, sizes, totals). The boutique already
+ * has each one; sending it on WhatsApp as well is optional. Customers can't read orders
+ * back from the database, so the status shown is the one at the time of ordering.
  */
 export default function InboxDrawer({ isOpen, onClose, orders }: InboxDrawerProps) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -82,7 +83,7 @@ export default function InboxDrawer({ isOpen, onClose, orders }: InboxDrawerProp
               </div>
 
               <p className="px-4 sm:px-6 py-3 border-t border-line text-xs text-muted bg-surface">
-                Orders are kept in this browser until you send them to the boutique on WhatsApp.
+                These orders are saved with the boutique. Sending one on WhatsApp is optional and helps the team confirm it sooner.
               </p>
             </motion.div>
           </div>
@@ -93,33 +94,18 @@ export default function InboxDrawer({ isOpen, onClose, orders }: InboxDrawerProp
 }
 
 function OrderCard({ order }: { order: Order }) {
-  const subtotal = order.subtotal ?? order.items.reduce((sum, it) => sum + it.price * it.quantity, 0);
-  const { url } = orderService.generateWhatsAppOrderUrl({
-    customerName: order.customerName,
-    customerPhone: order.customerPhone,
-    address: order.address,
-    city: order.city,
-    state: order.state,
-    pincode: order.pincode,
-    items: order.items.map((it) => ({ name: it.name, selectedSize: it.selectedSize, quantity: it.quantity, price: it.price })),
-    subtotal,
-    discount: order.discount,
-    couponCode: order.couponCode,
-    shippingCost: order.shippingCost ?? 0,
-    grandTotal: order.total,
-    orderId: order.id,
-  });
+  const url = orderService.whatsAppUrlForOrder(order);
 
   return (
     <article className="panel p-4 space-y-3 text-sm" aria-labelledby={`order-${order.id}-title`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 id={`order-${order.id}-title`} className="font-semibold text-ink tabular-nums">
-          Order #{order.id}
+          Order #{order.reference}
         </h3>
-        <span className={`badge ${STATUS_TONE[order.status] || "badge-neutral"}`}>{order.status}</span>
+        <span className={`badge ${STATUS_TONE[order.status] || "badge-neutral"}`}>{order.status} when placed</span>
       </div>
       <p className="text-xs text-muted tabular-nums">
-        Placed {order.date} at {order.time} · {order.paymentMethod === "COD" ? "Cash on Delivery" : order.paymentMethod}
+        Placed {order.date} at {order.time} · Cash on Delivery
       </p>
 
       <ul className="space-y-1.5 border-y border-line py-3">
@@ -157,7 +143,7 @@ function OrderCard({ order }: { order: Order }) {
 
       <a href={url} target="_blank" rel="noopener noreferrer" className="btn btn-whatsapp btn-sm btn-block">
         <MessageSquare className="w-3.5 h-3.5" aria-hidden="true" />
-        Send to the boutique on WhatsApp
+        Also send on WhatsApp (optional)
       </a>
     </article>
   );

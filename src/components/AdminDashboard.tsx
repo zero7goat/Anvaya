@@ -10,7 +10,7 @@ import { OVERLAY_MOTION } from "../utils/motion";
 import { useOverlay } from "../hooks/useOverlay";
 import { Product, Order, CollectionType } from "../types";
 import { productService } from "../services/productService";
-import { orderService } from "../services/orderService";
+import { orderApi, nextPaymentStatus, nextStatuses, type OrderStatus, type PaymentStatus } from "../services/orderApi";
 import { authService, AdminAuthState } from "../services/authService";
 import { catalogueAdmin, SaveResult } from "../services/catalogueAdmin";
 import {
@@ -100,29 +100,52 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
   const pendingRef = useRef(new Set<string>());
   const [notice, setNotice] = useState<{ kind: "success" | "warning" | "error"; text: string } | null>(null);
 
-  // Order Details Modal / View
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  // Order Details Modal / View (by id, so it always shows the latest copy read from the database)
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const selectedOrder = orders.find((o) => o.id === selectedOrderId) ?? null;
 
-  // Load products & orders from services
+  // Orders come from Supabase (public.orders, readable by admins only)
+  const [ordersLoad, setOrdersLoad] = useState<
+    { status: "loading" } | { status: "ready"; skipped: number } | { status: "error"; message: string }
+  >({ status: "loading" });
+  const ordersRequest = useRef(0);
+  // Order whose status change is being saved (one at a time)
+  const [orderBusy, setOrderBusy] = useState<string | null>(null);
+  const orderBusyRef = useRef(false);
+
+  // Load products from the catalogue service
   const refreshData = () => {
     const prods = productService.getProducts({ includeDisabled: true });
-    const ords = orderService.getOrders();
     setProducts(prods);
-    setOrders(ords);
     if (onProductsChanged) onProductsChanged();
+  };
+
+  const loadOrders = async () => {
+    const request = ++ordersRequest.current;
+    setOrdersLoad((prev) => (prev.status === "ready" ? prev : { status: "loading" }));
+    const result = await orderApi.listOrders();
+    if (request !== ordersRequest.current) return;
+    if (result.ok) {
+      setOrders(result.orders);
+      setOrdersLoad({ status: "ready", skipped: result.skipped });
+    } else {
+      setOrdersLoad({ status: "error", message: result.error });
+    }
   };
 
   useEffect(() => {
     refreshData();
   }, []);
 
-  // Once signed in, read the catalogue again as the admin, so hidden products are listed too
+  // Once signed in, read the catalogue again as the admin, so hidden products are listed
+  // too, and read the orders (which only admins can see)
   useEffect(() => {
     if (authState.status !== "admin") return;
     let active = true;
     productService.reloadCatalogue().then(() => {
       if (active) refreshData();
     });
+    void loadOrders();
     return () => {
       active = false;
     };
@@ -225,7 +248,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
       if (orderSearch.trim()) {
         const q = orderSearch.toLowerCase();
         return (
-          o.id.toLowerCase().includes(q) ||
+          o.reference.toLowerCase().includes(q) ||
           o.customerName.toLowerCase().includes(q) ||
           o.customerPhone.toLowerCase().includes(q) ||
           o.city.toLowerCase().includes(q) ||
@@ -374,13 +397,37 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
     );
   };
 
-  // Change order status
-  const handleChangeOrderStatus = (orderId: string, newStatus: Order["status"]) => {
-    orderService.updateOrderStatus(orderId, newStatus);
-    refreshData();
-    if (selectedOrder && selectedOrder.id === orderId) {
-      const updated = orderService.getOrderById(orderId);
-      if (updated) setSelectedOrder(updated);
+  // Change an order's status or payment through admin_update_order_status. The database
+  // checks the admin and the allowed changes; the list is then read again, so what is
+  // shown is what was saved.
+  const handleChangeOrder = async (order: Order, change: { status?: OrderStatus; paymentStatus?: PaymentStatus }) => {
+    if (orderBusyRef.current) return;
+    if (
+      (change.status === "Cancelled" || change.status === "Returned") &&
+      !window.confirm(`Mark order ${order.reference} as ${change.status}? Its pieces go back into stock, and this can't be undone.`)
+    ) {
+      return;
+    }
+    orderBusyRef.current = true;
+    setOrderBusy(order.id);
+    try {
+      const result = await orderApi.updateStatus(order.id, change);
+      if (result.ok) {
+        const what = change.status ? `is now ${result.status}` : `is marked ${result.paymentStatus}`;
+        setNotice({ kind: "success", text: result.changed ? `Order ${order.reference} ${what}.` : `Order ${order.reference} was already up to date.` });
+        // Cancelled and Returned orders put their stock back
+        if (result.status === "Cancelled" || result.status === "Returned") {
+          productService.reloadCatalogue().then((reloaded) => {
+            if (reloaded) refreshData();
+          });
+        }
+      } else {
+        setNotice({ kind: "error", text: `Order ${order.reference}: ${result.error}` });
+      }
+      await loadOrders();
+    } finally {
+      orderBusyRef.current = false;
+      setOrderBusy(null);
     }
   };
 
@@ -796,26 +843,22 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                 </div>
 
                 <div className="divide-y divide-line">
+                  <OrdersLoadNote load={ordersLoad} empty={orders.length === 0} onRetry={loadOrders} className="py-6" />
                   {orders.slice(0, 5).map((order) => (
-                    <div key={order.id} className="py-3 flex items-center justify-between text-xs">
-                      <div>
+                    <div key={order.id} className="py-3 flex items-center justify-between gap-3 text-xs">
+                      <div className="min-w-0">
                         <div className="font-semibold text-neutral-900">
-                          {order.customerName} · <span className="text-neutral-400 tabular-nums">{order.id}</span>
+                          {order.customerName} · <span className="text-neutral-400 tabular-nums">{order.reference}</span>
                         </div>
                         <div className="text-neutral-500 mt-0.5">
                           {order.items.map(i => `${i.name} (${i.selectedSize})`).join(", ")}
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-right shrink-0">
                         <div className="font-semibold text-neutral-900 tabular-nums">
                           ₹{order.total.toLocaleString("en-IN")}
                         </div>
-                        <span className={`badge mt-1 ${
-                          order.status === "Delivered" ? "badge-success" :
-                          order.status === "Shipped" ? "badge-neutral" :
-                          order.status === "Cancelled" ? "badge-danger" :
-                          "badge-warning"
-                        }`}>
+                        <span className={`badge mt-1 ${orderStatusTone(order.status)}`}>
                           {order.status}
                         </span>
                       </div>
@@ -1164,27 +1207,45 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                 </p>
               </div>
 
-              {/* Status Filter */}
-              <select
-                value={orderStatusFilter}
-                onChange={(e) => setOrderStatusFilter(e.target.value)}
-                className="field field-sm w-auto"
-              >
-                <option value="All">All Order Statuses</option>
-                <option value="Pending">Pending</option>
-                <option value="Confirmed">Confirmed</option>
-                <option value="Shipped">Shipped</option>
-                <option value="Delivered">Delivered</option>
-                <option value="Cancelled">Cancelled</option>
-              </select>
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Status Filter */}
+                <select
+                  value={orderStatusFilter}
+                  onChange={(e) => setOrderStatusFilter(e.target.value)}
+                  className="field field-sm w-auto"
+                  aria-label="Filter orders by status"
+                >
+                  <option value="All">All Order Statuses</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Confirmed">Confirmed</option>
+                  <option value="Shipped">Shipped</option>
+                  <option value="Delivered">Delivered</option>
+                  <option value="Cancelled">Cancelled</option>
+                  <option value="Returned">Returned</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => void loadOrders()}
+                  disabled={ordersLoad.status === "loading"}
+                  className="btn btn-secondary btn-sm"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${ordersLoad.status === "loading" ? "animate-spin" : ""}`} aria-hidden="true" />
+                  Refresh
+                </button>
+              </div>
             </div>
 
             <div className="panel overflow-hidden">
+              <OrdersLoadNote load={ordersLoad} empty={orders.length === 0} onRetry={loadOrders} className="p-6" />
+              {ordersLoad.status === "ready" && orders.length > 0 && filteredOrders.length === 0 && (
+                <p className="p-6 text-center text-xs text-muted">No orders match this filter.</p>
+              )}
+              {filteredOrders.length > 0 && (
               <div className="overflow-x-auto">
                 <table className="ds-table ds-table-stack">
                   <thead>
                     <tr>
-                      <th className="py-3 px-4">Order ID & Date</th>
+                      <th className="py-3 px-4">Order & Date</th>
                       <th className="py-3 px-4">Customer</th>
                       <th className="py-3 px-4">Destination</th>
                       <th className="py-3 px-4">Items</th>
@@ -1197,8 +1258,8 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                     {filteredOrders.map((o) => (
                       <tr key={o.id}>
                         <td data-label="" className="py-3 px-4">
-                          <div className="tabular-nums font-bold text-neutral-900">{o.id}</div>
-                          <div className="text-neutral-400 text-xs">{o.date} {o.time}</div>
+                          <div className="tabular-nums font-bold text-neutral-900">{o.reference}</div>
+                          <div className="text-neutral-400 text-xs">{o.date} {o.time} IST</div>
                         </td>
                         <td data-label="Customer" className="py-3 px-4">
                           <div className="font-semibold text-neutral-800">{o.customerName}</div>
@@ -1214,24 +1275,16 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                         </td>
                         <td data-label="Total" className="py-3 px-4 font-semibold text-neutral-900 tabular-nums">
                           ₹{o.total.toLocaleString("en-IN")}
+                          <div className="text-neutral-500 text-xs font-normal">{o.paymentStatus}</div>
                         </td>
                         <td data-label="Status" className="py-3 px-4">
-                          <select
-                            value={o.status}
-                            onChange={(e) => handleChangeOrderStatus(o.id, e.target.value as any)}
-                            className="field field-sm w-auto"
-                          >
-                            <option value="Pending">Pending</option>
-                            <option value="Confirmed">Confirmed</option>
-                            <option value="Shipped">Shipped</option>
-                            <option value="Delivered">Delivered</option>
-                            <option value="Cancelled">Cancelled</option>
-                          </select>
+                          <OrderStatusControl order={o} busy={orderBusy === o.id} disabled={orderBusy !== null} onChange={(status) => void handleChangeOrder(o, { status })} />
                         </td>
                         <td data-label="Details" className="py-3 px-4 text-right">
                           <button
-                            onClick={() => setSelectedOrder(o)}
+                            onClick={() => setSelectedOrderId(o.id)}
                             className="btn btn-secondary btn-sm"
+                            aria-label={`View order ${o.reference}`}
                           >
                             View
                           </button>
@@ -1241,6 +1294,12 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                   </tbody>
                 </table>
               </div>
+              )}
+              {ordersLoad.status === "ready" && ordersLoad.skipped > 0 && (
+                <p className="px-4 py-3 border-t border-line text-xs text-warning">
+                  {ordersLoad.skipped} order{ordersLoad.skipped === 1 ? "" : "s"} couldn't be shown because the saved figures don't add up. Check them in Supabase.
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -1570,15 +1629,15 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
           <div className="dialog-panel bg-surface max-w-lg w-full max-h-[85vh] flex flex-col overflow-hidden">
             <div className="px-6 py-4 border-b border-line flex items-center justify-between">
               <div>
-                <h3 className="heading-card text-lg sm:text-lg">
-                  Order #{selectedOrder.id}
+                <h3 className="heading-card text-lg sm:text-lg tabular-nums">
+                  Order #{selectedOrder.reference}
                 </h3>
                 <p className="text-xs text-neutral-500">
-                  {selectedOrder.date} at {selectedOrder.time} · {selectedOrder.paymentMethod}
+                  {selectedOrder.date} at {selectedOrder.time} IST · Cash on Delivery · {selectedOrder.paymentStatus}
                 </p>
               </div>
               <button
-                onClick={() => setSelectedOrder(null)}
+                onClick={() => setSelectedOrderId(null)}
                 className="btn-icon btn-icon-sm" aria-label="Close"
               >
                 <X className="w-5 h-5" />
@@ -1589,7 +1648,10 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
               {/* Customer Info */}
               <div className="panel-muted p-3">
                 <div className="font-bold text-neutral-900">{selectedOrder.customerName}</div>
-                <div className="text-neutral-600 mt-0.5">{selectedOrder.customerPhone} · {selectedOrder.customerEmail}</div>
+                <div className="text-neutral-600 mt-0.5">
+                  {selectedOrder.customerPhone}
+                  {selectedOrder.customerEmail ? ` · ${selectedOrder.customerEmail}` : ""}
+                </div>
                 <div className="text-neutral-500 mt-1">
                   {selectedOrder.address}, {selectedOrder.city}, {selectedOrder.state} - {selectedOrder.pincode}
                 </div>
@@ -1613,34 +1675,64 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                     </div>
                   ))}
                 </div>
-                <div className="bg-surface-muted p-3 flex justify-between font-semibold text-ink border-t border-line">
-                  <span>Total Amount (COD):</span>
-                  <span className="tabular-nums">₹{selectedOrder.total.toLocaleString("en-IN")}</span>
-                </div>
+                <dl className="bg-surface-muted p-3 space-y-1 border-t border-line">
+                  <div className="flex justify-between text-neutral-600">
+                    <dt>Subtotal</dt>
+                    <dd className="tabular-nums">₹{(selectedOrder.subtotal ?? 0).toLocaleString("en-IN")}</dd>
+                  </div>
+                  {selectedOrder.discount ? (
+                    <div className="flex justify-between text-neutral-600">
+                      <dt>Coupon {selectedOrder.couponCode}</dt>
+                      <dd className="tabular-nums">-₹{selectedOrder.discount.toLocaleString("en-IN")}</dd>
+                    </div>
+                  ) : null}
+                  <div className="flex justify-between text-neutral-600">
+                    <dt>Delivery</dt>
+                    <dd className="tabular-nums">{selectedOrder.shippingCost ? `₹${selectedOrder.shippingCost.toLocaleString("en-IN")}` : "Free"}</dd>
+                  </div>
+                  <div className="flex justify-between font-semibold text-ink pt-1">
+                    <dt>Total Amount (COD):</dt>
+                    <dd className="tabular-nums">₹{selectedOrder.total.toLocaleString("en-IN")}</dd>
+                  </div>
+                </dl>
               </div>
 
-              {/* Fulfillment Status */}
-              <div>
-                <label className="field-label">
-                  Change Fulfillment Status
-                </label>
-                <select
-                  value={selectedOrder.status}
-                  onChange={(e) => handleChangeOrderStatus(selectedOrder.id, e.target.value as any)}
-                  className="field"
-                >
-                  <option value="Pending">Pending</option>
-                  <option value="Confirmed">Confirmed</option>
-                  <option value="Shipped">Shipped</option>
-                  <option value="Delivered">Delivered</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
+              {/* Fulfillment status and payment (only the changes the database allows) */}
+              <div className="space-y-3">
+                <div>
+                  <span className="field-label">Fulfillment Status</span>
+                  <OrderStatusControl
+                    order={selectedOrder}
+                    busy={orderBusy === selectedOrder.id}
+                    disabled={orderBusy !== null}
+                    onChange={(status) => void handleChangeOrder(selectedOrder, { status })}
+                    wide
+                  />
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    Payment: <strong className="text-ink">{selectedOrder.paymentStatus}</strong>
+                  </span>
+                  {(() => {
+                    const payment = nextPaymentStatus(selectedOrder);
+                    return payment ? (
+                      <button
+                        type="button"
+                        disabled={orderBusy !== null}
+                        onClick={() => void handleChangeOrder(selectedOrder, { paymentStatus: payment })}
+                        className="btn btn-secondary btn-sm"
+                      >
+                        {payment === "Paid" ? "Mark cash collected (Paid)" : "Mark refunded"}
+                      </button>
+                    ) : null;
+                  })()}
+                </div>
               </div>
             </div>
 
             <div className="px-6 py-3 bg-canvas border-t border-line flex justify-end">
               <button
-                onClick={() => setSelectedOrder(null)}
+                onClick={() => setSelectedOrderId(null)}
                 className="btn btn-primary"
               >
                 Close
@@ -1651,6 +1743,89 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
       )}
 
     </div>
+  );
+}
+
+const orderStatusTone = (status: OrderStatus) =>
+  status === "Delivered" ? "badge-success" :
+  status === "Shipped" || status === "Confirmed" ? "badge-neutral" :
+  status === "Cancelled" || status === "Returned" ? "badge-danger" :
+  "badge-warning";
+
+/** Loading, error and empty states for the orders read from the database */
+function OrdersLoadNote({
+  load,
+  empty,
+  onRetry,
+  className = "",
+}: {
+  load: { status: "loading" } | { status: "ready"; skipped: number } | { status: "error"; message: string };
+  empty: boolean;
+  onRetry: () => void;
+  className?: string;
+}) {
+  if (load.status === "loading" && empty) {
+    return (
+      <p className={`flex items-center justify-center gap-2 text-xs text-muted ${className}`} role="status">
+        <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+        Loading orders…
+      </p>
+    );
+  }
+  if (load.status === "error") {
+    return (
+      <div className={`status-note status-note-danger ${className}`} role="alert">
+        <AlertTriangle className="w-4 h-4 shrink-0" />
+        <span className="flex-1">{load.message}</span>
+        <button type="button" onClick={onRetry} className="btn btn-secondary btn-sm">
+          Try again
+        </button>
+      </div>
+    );
+  }
+  if (load.status === "ready" && empty) {
+    return <p className={`text-center text-xs text-muted ${className}`}>No orders yet. Orders placed on the website appear here.</p>;
+  }
+  return null;
+}
+
+/**
+ * The order's current status, with only the changes the database allows next
+ * (Cancelled and Returned are final, so those show as a badge).
+ */
+function OrderStatusControl({
+  order,
+  busy,
+  disabled,
+  onChange,
+  wide = false,
+}: {
+  order: Order;
+  busy: boolean;
+  disabled: boolean;
+  onChange: (status: OrderStatus) => void;
+  wide?: boolean;
+}) {
+  const options = nextStatuses(order.status);
+  if (options.length === 0) return <span className={`badge ${orderStatusTone(order.status)}`}>{order.status}</span>;
+  return (
+    <select
+      value=""
+      disabled={disabled}
+      aria-busy={busy}
+      aria-label={`Status of order ${order.reference}: ${order.status}. Change to`}
+      onChange={(e) => {
+        if (e.target.value) onChange(e.target.value as OrderStatus);
+      }}
+      className={`field ${wide ? "" : "field-sm w-auto"}`}
+    >
+      <option value="">{busy ? `${order.status} (saving…)` : order.status}</option>
+      {options.map((status) => (
+        <option key={status} value={status}>
+          Change to {status}
+        </option>
+      ))}
+    </select>
   );
 }
 

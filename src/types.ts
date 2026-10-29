@@ -60,17 +60,24 @@ export interface Order {
   city: string;
   state: string;
   pincode: string;
-  // Price breakdown (orders placed through checkout record these; older samples may not)
+  // Price breakdown, as recorded by the database (public.orders)
   subtotal?: number;
   discount?: number;
   couponCode?: string;
   shippingCost?: number;
   total: number;
-  date: string; // YYYY-MM-DD
-  time: string; // HH:MM
-  paymentMethod: "COD" | "Razorpay Simulation";
-  paymentStatus: "Pending" | "Paid" | "COD - Due";
+  // Shown to customers and on WhatsApp: ANV-XXXXXXXXXX. For orders read by an admin,
+  // id is the database row id (needed for status changes); otherwise it equals reference.
+  // Every order read from the database has reference and createdAt; they are optional
+  // only for the old Express server (server.ts), which the site doesn't use.
+  reference?: string;
+  createdAt?: string; // ISO timestamp from the database
+  date: string; // YYYY-MM-DD (India time)
+  time: string; // HH:MM (India time)
+  paymentMethod: "COD";
+  paymentStatus: "COD - Due" | "Paid" | "Refunded";
   status: "Pending" | "Confirmed" | "Shipped" | "Delivered" | "Cancelled" | "Returned";
+  // Used only by server.ts
   emailContent?: string;
   whatsappContent?: string;
 }
