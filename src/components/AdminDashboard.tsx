@@ -177,7 +177,11 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
     try {
       const result = await action();
       if (result.ok) await showSaved(successText);
-      else setNotice({ kind: "error", text: result.error });
+      else {
+        setNotice({ kind: "error", text: result.error });
+        // Refused because stock changed since it was loaded: show the live numbers
+        if (result.stockChanged && (await productService.reloadCatalogue())) refreshData();
+      }
       return result.ok;
     } finally {
       pendingRef.current.delete(key);
@@ -342,10 +346,11 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
     try {
       const draft = checked.value;
       const result = editingProduct
-        ? await catalogueAdmin.updateProduct(editingProduct.id, draft)
+        ? await catalogueAdmin.updateProduct(editingProduct, draft)
         : await catalogueAdmin.createProduct(newFormProductId, draft);
       if (!result.ok) {
         setFormError(result.error);
+        if (result.stockChanged) await showLiveStockInForm(editingProduct?.id ?? newFormProductId, editingProduct);
         return;
       }
       await showSaved(editingProduct ? `Saved “${draft.name}”.` : `Added “${draft.name}”.`);
@@ -354,6 +359,18 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
       savingProductRef.current = false;
       setSavingProduct(false);
     }
+  };
+
+  // A form save refused because stock changed meanwhile: keep what was typed, but put the
+  // live stock in the size boxes, and compare the next save with these numbers
+  const showLiveStockInForm = async (productId: string, loaded: Product | null) => {
+    await productService.reloadCatalogue();
+    refreshData();
+    const fresh = productService.getProductById(productId);
+    if (!fresh) return;
+    // Kept as first loaded: a category change still counts as one (old sizes get removed)
+    if (loaded) setEditingProduct({ ...fresh, category: loaded.category });
+    setFormData((prev) => ({ ...prev, sizeStock: Object.fromEntries(ALL_SIZES.map((sz) => [sz, fresh.sizeStock?.[sz] ?? 0])) }));
   };
 
   const closeProductModal = () => {
