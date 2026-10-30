@@ -512,6 +512,13 @@
   /* Compact variant for filters and inline table edits */
   .field-sm { padding: 0.375rem 0.625rem; font-size: 0.75rem; line-height: 1rem; }
 
+  /* Fields shoppers type into on phones (checkout, bag coupon, collection search and
+     sort): iPhone Safari zooms into any field with text under 16px, so touch screens and
+     narrow windows get 16px; desktop keeps each field's own size */
+  @media (pointer: coarse), (max-width: 639px) {
+    .field-touch { font-size: 1rem; line-height: 1.25rem; }
+  }
+
   /* Field on the maroon header (search) */
   .field-on-dark {
     background-color: rgb(0 0 0 / 0.35);

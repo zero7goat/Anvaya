@@ -16,6 +16,9 @@ interface CartDrawerProps {
   cartItems: CartItem[];
   onUpdateQuantity: (productId: string, size: string, quantity: number) => void;
   onRemoveItem: (productId: string, size: string) => void;
+  // The applied coupon code, kept by the app across reloads; only the code is kept
+  couponCode?: string;
+  onCouponChange: (code: string | undefined) => void;
   onCheckout: (appliedPromoCode?: string) => void;
 }
 
@@ -25,16 +28,22 @@ export default function CartDrawer({
   cartItems,
   onUpdateQuantity,
   onRemoveItem,
+  couponCode,
+  onCouponChange,
   onCheckout,
 }: CartDrawerProps) {
-  const [promoCode, setPromoCode] = useState<string>("");
-  const [activeOffer, setActiveOffer] = useState<Offer | null>(null);
+  const [promoCode, setPromoCode] = useState<string>(couponCode ?? "");
   const [promoError, setPromoError] = useState<string>("");
-  const [promoSuccess, setPromoSuccess] = useState<string>("");
   const [checkingPromo, setCheckingPromo] = useState<boolean>(false);
 
   const panelRef = useRef<HTMLDivElement>(null);
   useOverlay(isOpen, onClose, panelRef);
+
+  // A saved code is looked up again on every render, against today's offers and this bag,
+  // so an expired or ineligible coupon never gives a discount. Checkout then has the
+  // database price the order with the code, which is what the customer actually pays.
+  const activeOffer: Offer | null = couponCode ? offerService.findActiveOfferByCode(couponCode) : null;
+  const couponUnavailable = Boolean(couponCode) && !activeOffer;
 
   // Same rules as checkout: subtotal, coupon (re-checked as the bag changes), shipping
   const { subtotal, discount: discountAmount, shipping: shippingCost, total: grandTotal, amountToFreeShipping } =
@@ -48,26 +57,30 @@ export default function CartDrawer({
     if (!promoCode.trim()) return;
     setCheckingPromo(true);
     setPromoError("");
-    setPromoSuccess("");
 
     try {
       const matched = offerService.findActiveOfferByCode(promoCode);
 
       if (!matched) {
         setPromoError("Invalid coupon or code expired.");
-        setActiveOffer(null);
+        onCouponChange(undefined);
       } else if (getOfferIneligibility(matched, subtotal)) {
         setPromoError(getOfferIneligibility(matched, subtotal)!);
-        setActiveOffer(null);
+        onCouponChange(undefined);
       } else {
-        setActiveOffer(matched);
-        setPromoSuccess(`Coupon "${matched.code}" applied successfully!`);
+        onCouponChange(matched.code);
       }
     } catch (err) {
       setPromoError("Failed to apply promotion coupon.");
     } finally {
       setCheckingPromo(false);
     }
+  };
+
+  const handleRemoveCoupon = () => {
+    onCouponChange(undefined);
+    setPromoCode("");
+    setPromoError("");
   };
 
   const handleCheckoutClick = () => {
@@ -235,7 +248,7 @@ export default function CartDrawer({
                     autoCapitalize="characters"
                     autoComplete="off"
                     spellCheck={false}
-                    className="field field-sm flex-1 min-w-0 uppercase"
+                    className="field field-sm field-touch flex-1 min-w-0 uppercase"
                   />
                   <button
                     type="submit"
@@ -253,10 +266,10 @@ export default function CartDrawer({
                   </p>
                 )}
 
-                {promoSuccess && !couponNoLongerApplies && (
+                {activeOffer && !couponNoLongerApplies && (
                   <p className="field-error mt-1 !text-success" role="status">
                     <CheckCircle className="w-3 h-3" />
-                    <span>{promoSuccess}</span>
+                    <span>Coupon "{activeOffer.code}" applied.</span>
                   </p>
                 )}
                 {couponNoLongerApplies && (
@@ -264,6 +277,17 @@ export default function CartDrawer({
                     <AlertCircle className="w-3 h-3" />
                     <span>{activeOffer!.code} no longer applies: {couponNoLongerApplies}</span>
                   </p>
+                )}
+                {couponUnavailable && (
+                  <p className="field-error mt-1" role="status">
+                    <AlertCircle className="w-3 h-3" />
+                    <span>Coupon "{couponCode}" is no longer available.</span>
+                  </p>
+                )}
+                {couponCode && (
+                  <button type="button" onClick={handleRemoveCoupon} className="link text-xs">
+                    Remove coupon
+                  </button>
                 )}
               </div>
 

@@ -148,7 +148,7 @@ export default function CollectionPage({
           placeholder={`Search ${collectionInfo.name}...`}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="field field-sm pl-8"
+          className="field field-sm field-touch pl-8"
         />
       </div>
 
@@ -378,7 +378,7 @@ export default function CollectionPage({
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as SortOption)}
-                className="field field-sm w-auto"
+                className="field field-sm field-touch w-auto"
                 aria-label="Sort products"
               >
                 <option value="newest">Newest</option>

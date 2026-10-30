@@ -1,6 +1,7 @@
 import { Product, CollectionType, Review } from "../types";
 import { getSizeOptionsFor } from "../utils/sizes";
 import { isSupabaseConfigured } from "../utils/supabaseConfig";
+import { customerReviews } from "../utils/reviews";
 
 /**
  * SAMPLE PRODUCT CATALOGUE FOR ANVAYA
@@ -397,7 +398,8 @@ class ProductService {
   private reloadRequest = 0;
 
   constructor() {
-    this.products = [...INITIAL_SAMPLE_PRODUCTS];
+    // The built-in catalogue (used when Supabase can't be reached) hides the seeded reviews too
+    this.products = INITIAL_SAMPLE_PRODUCTS.map((p) => ({ ...p, reviews: customerReviews(p.reviews) }));
   }
 
   /**

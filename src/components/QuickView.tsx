@@ -6,6 +6,7 @@ import { BOUTIQUE_CONFIG } from "../config";
 import { productService } from "../services/productService";
 import { OVERLAY_MOTION } from "../utils/motion";
 import ProductImage from "./ProductImage";
+import SizePrompt, { focusFirstSize } from "./SizePrompt";
 import { getProductImage } from "../data/imageRegistry";
 import {
   formatINR,
@@ -100,8 +101,24 @@ function QuickViewDialog({
     };
   }, [onClose]);
 
+  // Add to Cart pressed before choosing a size: same as the product page, the message goes
+  // under the sizes, which scroll into view inside the dialog and take focus
+  const [sizePrompt, setSizePrompt] = useState(false);
+  const sizeGroupRef = useRef<HTMLDivElement>(null);
+  const askForSize = () => {
+    setSizePrompt(true);
+    sizeGroupRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    focusFirstSize(sizeGroupRef.current);
+  };
+
+  const handleSizeChange = (size: string) => {
+    setSelectedSize(size);
+    setSizePrompt(false);
+  };
+
   const handleAddToCart = () => {
-    if (!selectedSize || selectedStock === 0) return;
+    if (!selectedSize) return askForSize();
+    if (selectedStock === 0) return;
     onAddToCart(product, selectedSize, 1);
   };
 
@@ -175,9 +192,17 @@ function QuickViewDialog({
             )}
 
             {/* Sizes and stock */}
-            <div className="space-y-2">
+            <div
+              ref={sizeGroupRef}
+              role="group"
+              aria-labelledby="quick-view-size-label"
+              aria-describedby={sizePrompt && !selectedSize ? "quick-view-size-prompt" : undefined}
+              className="space-y-2 scroll-my-3"
+            >
               <div className="flex items-center justify-between">
-                <span className="field-label mb-0">Size</span>
+                <span id="quick-view-size-label" className={`field-label mb-0 ${sizePrompt && !selectedSize ? "!text-danger" : ""}`}>
+                  Size
+                </span>
                 <span
                   className={`flex items-center gap-1 text-xs font-semibold ${isOutOfStock ? "text-danger" : "text-success"}`}
                   aria-live="polite"
@@ -202,7 +227,7 @@ function QuickViewDialog({
                       key={size}
                       type="button"
                       disabled={sizeOut}
-                      onClick={() => setSelectedSize(size)}
+                      onClick={() => handleSizeChange(size)}
                       aria-pressed={selectedSize === size}
                       aria-label={`Size ${size}, ${sizeOut ? "sold out" : `${count} in stock`}`}
                       className="size-option min-w-12 min-h-11"
@@ -212,6 +237,7 @@ function QuickViewDialog({
                   );
                 })}
               </div>
+              {sizePrompt && !selectedSize && <SizePrompt id="quick-view-size-prompt" />}
             </div>
 
             <div className="mt-auto pt-2 space-y-2">
@@ -219,7 +245,6 @@ function QuickViewDialog({
                 <button
                   type="button"
                   onClick={handleAddToCart}
-                  disabled={!selectedSize}
                   className="btn btn-primary btn-block"
                 >
                   {selectedSize ? "Add to Cart" : "Select a Size"}

@@ -1,5 +1,6 @@
 import type { CollectionType, Product, Review } from "../types";
 import { getSizeOptionsFor } from "./sizes.ts";
+import { customerReviews } from "./reviews.ts";
 
 // Columns read from Supabase, matching supabase/drafts/products_schema.sql
 export const PRODUCT_COLUMNS =
@@ -53,10 +54,9 @@ export const rowToProduct = (row: unknown): Product | null => {
   }
 
   const salePrice = wholeNumber(row.sale_price);
-  const reviews = (Array.isArray(row.product_reviews) ? row.product_reviews : [])
-    .map(toReview)
-    .filter((r): r is Review => r !== null)
-    .sort((a, b) => b.date.localeCompare(a.date)); // newest first
+  const reviews = customerReviews(
+    (Array.isArray(row.product_reviews) ? row.product_reviews : []).map(toReview).filter((r): r is Review => r !== null)
+  ).sort((a, b) => b.date.localeCompare(a.date)); // newest first
 
   return {
     id,

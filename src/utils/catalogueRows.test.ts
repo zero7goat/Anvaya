@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { rowToProduct, rowsToProducts } from "./catalogueRows.ts";
+import { customerReviews } from "./reviews.ts";
 
 const kurtaRow = {
   id: "alk-001",
@@ -57,6 +58,18 @@ test("reviews are newest first; nulls become undefined", () => {
   assert.equal(p.reviews[1].verified, false);
   assert.equal(p.salePrice, undefined);
   assert.equal(p.subcategory, undefined);
+});
+
+test("the seeded sample reviews are never shown; genuine reviews are", () => {
+  const seeded = { author: "Sample", rating: 5, comment: "Sample", review_date: "2026-09-20", verified: true, brand_reply: "Sample reply" };
+  const p = rowToProduct({ ...kurtaRow, product_reviews: [...kurtaRow.product_reviews, { ...seeded, id: "rev-01" }, { ...seeded, id: "rev-02" }] })!;
+  assert.deepEqual(p.reviews.map((r) => r.id), ["rev-b", "rev-a"]);
+  assert.deepEqual(rowToProduct({ ...kurtaRow, product_reviews: [{ ...seeded, id: "rev-01" }] })!.reviews, []);
+});
+
+test("the review filter (also used for the built-in catalogue) drops only the seeded ids", () => {
+  const review = (id: string) => ({ id, author: "A", rating: 5, comment: "", date: "2026-10-30", verified: false });
+  assert.deepEqual(customerReviews([review("rev-01"), review("rev-03"), review("rev-02"), review("real-1")]).map((r) => r.id), ["rev-03", "real-1"]);
 });
 
 test("rows the shop cannot show are skipped", () => {

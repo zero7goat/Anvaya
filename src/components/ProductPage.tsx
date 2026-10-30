@@ -1,4 +1,4 @@
-import { Fragment, ReactNode, useEffect, useMemo, useState } from "react";
+import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Banknote, Check, ChevronRight, MapPin, MessageSquare, Minus, Plus, Star, Truck } from "lucide-react";
 import { CollectionType, Product } from "../types";
 import { BOUTIQUE_CONFIG } from "../config";
@@ -21,6 +21,8 @@ import ProductGallery from "./ProductGallery";
 import MobileProductGallery from "./MobileProductGallery";
 import { useIsMobile } from "../hooks/useIsMobile";
 import ProductInfoSections from "./ProductInfoSections";
+import NotFoundPage from "./NotFoundPage";
+import SizePrompt, { focusFirstSize } from "./SizePrompt";
 import { BackgroundMotif } from "./decor/Motifs";
 
 interface ProductPageProps {
@@ -131,19 +133,35 @@ function ProductDetails({
     return () => clearTimeout(timer);
   }, [addedSuccess]);
 
+  // Add to Cart / Buy Now pressed before choosing a size: say so under the sizes, bring
+  // them into view and put focus on the first size that can be chosen
+  const [sizePrompt, setSizePrompt] = useState(false);
+  const sizeGroupRef = useRef<HTMLFieldSetElement>(null);
+  const askForSize = () => {
+    setSizePrompt(true);
+    const group = sizeGroupRef.current;
+    if (!group) return;
+    const { top, bottom } = group.getBoundingClientRect();
+    if (top < 0 || bottom > window.innerHeight) smoothScroll.scrollToElement(group);
+    focusFirstSize(group);
+  };
+
   const handleSizeChange = (size: string) => {
     setSelectedSize(size);
     setQuantity(1);
+    setSizePrompt(false);
   };
 
   const handleAddToCart = () => {
-    if (!selectedSize || selectedStock === 0) return;
+    if (!selectedSize) return askForSize();
+    if (selectedStock === 0) return;
     onAddToCart(product, selectedSize, quantity);
     setAddedSuccess(true);
   };
 
   const handleBuyNow = () => {
-    if (!selectedSize || selectedStock === 0) return;
+    if (!selectedSize) return askForSize();
+    if (selectedStock === 0) return;
     onBuyNow(product, selectedSize, quantity);
   };
 
@@ -305,8 +323,13 @@ function ProductDetails({
             </div>
 
             {/* Size selection */}
-            <fieldset className="space-y-2" disabled={isOutOfStock}>
-              <legend className="field-label mb-2">
+            <fieldset
+              ref={sizeGroupRef}
+              className="space-y-2 scroll-mt-28"
+              disabled={isOutOfStock}
+              aria-describedby={sizePrompt && !selectedSize ? "size-prompt" : undefined}
+            >
+              <legend className={`field-label mb-2 ${sizePrompt && !selectedSize ? "!text-danger" : ""}`}>
                 Select Size
               </legend>
               <div className="flex flex-wrap gap-2">
@@ -329,6 +352,7 @@ function ProductDetails({
                   );
                 })}
               </div>
+              {sizePrompt && !selectedSize && <SizePrompt id="size-prompt" />}
             </fieldset>
 
             {/* Quantity + Add to Cart */}
@@ -360,7 +384,6 @@ function ProductDetails({
                   <button
                     type="button"
                     onClick={handleAddToCart}
-                    disabled={!selectedSize}
                     className={`btn btn-lg flex-1 ${addedSuccess ? "btn-success" : "btn-primary"}`}
                   >
                     {addedSuccess ? (
@@ -379,7 +402,6 @@ function ProductDetails({
                   <button
                     type="button"
                     onClick={handleBuyNow}
-                    disabled={!selectedSize}
                     className="btn btn-secondary"
                   >
                     Buy Now
@@ -484,34 +506,13 @@ function ProductNotFound({
   onNavigateCollection,
 }: Pick<ProductPageProps, "onNavigateHome" | "onNavigateCollection">) {
   return (
-    <div className="bg-canvas min-h-[60vh] flex items-center justify-center px-4 py-24" id="product-not-found">
-      <div className="max-w-md text-center">
-        <p className="eyebrow mb-3">Product not found</p>
-        <h1 className="heading-title mb-3">This piece isn't available</h1>
-        <p className="text-body mb-8">
-          It may have been removed or the link may be incorrect. Explore our collections to find something you love.
-        </p>
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          <button
-            onClick={() => onNavigateCollection("alankritha")}
-            className="btn btn-primary"
-          >
-            {BOUTIQUE_CONFIG.collections.alankritha.name} Kurtas
-          </button>
-          <button
-            onClick={() => onNavigateCollection("ayanaa")}
-            className="btn btn-primary"
-          >
-            {BOUTIQUE_CONFIG.collections.ayanaa.name} Sarees
-          </button>
-          <button
-            onClick={onNavigateHome}
-            className="btn btn-secondary"
-          >
-            Home
-          </button>
-        </div>
-      </div>
-    </div>
+    <NotFoundPage
+      id="product-not-found"
+      eyebrow="Product not found"
+      title="This piece isn't available"
+      message="It may have been removed or the link may be incorrect. Explore our collections to find something you love."
+      onNavigateHome={onNavigateHome}
+      onNavigateCollection={onNavigateCollection}
+    />
   );
 }

@@ -22,6 +22,9 @@ import {
   setCartItemQuantity,
   toStoredCart,
 } from "./utils/cart";
+import { loadSavedCoupon, saveCoupon } from "./utils/savedCoupon";
+import { resolveRoute, type ViewState } from "./utils/routes";
+import NotFoundPage from "./components/NotFoundPage";
 
 // Screens most visitors never open load on first use, keeping the first page light
 const AdminDashboard = lazy(() => import("./components/AdminDashboard"));
@@ -52,13 +55,6 @@ const writeStoredCart = (lines: StoredCartLine[]) => {
   }
 };
 
-type ViewState = "store" | "collection_alankritha" | "collection_ayanaa" | "product" | "admin";
-
-// Product id from /product/:id (or the #/product/:id hash fallback), else null
-const parseProductId = (path: string, hash: string): string | null => {
-  const match = path.match(/^\/product\/([^/]+)/) || hash.match(/^#\/product\/([^/]+)/);
-  return match ? decodeURIComponent(match[1]) : null;
-};
 
 export default function App() {
   // Navigation / View State
@@ -77,6 +73,9 @@ export default function App() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState<boolean>(false);
   // Only the code is passed on: checkout recalculates the discount for the cart it shows
   const [appliedPromoCode, setAppliedPromoCode] = useState<string | undefined>(undefined);
+  // The code applied in the bag, kept across reloads (see utils/savedCoupon.ts)
+  const [bagCouponCode, setBagCouponCode] = useState<string | undefined>(loadSavedCoupon);
+  useEffect(() => saveCoupon(bagCouponCode), [bagCouponCode]);
   const cartHydrated = useRef(false);
   // Orders placed in this browser during this visit (shown under "Order updates")
   const [myOrderIds, setMyOrderIds] = useState<string[]>([]);
@@ -156,23 +155,10 @@ export default function App() {
   // Listen for URL routes and hash changes
   useEffect(() => {
     const handleRouteChange = () => {
-      const path = window.location.pathname;
-      const hash = window.location.hash;
-      const productId = parseProductId(path, hash);
-      setCurrentProductId(productId);
+      const route = resolveRoute(window.location.pathname, window.location.hash);
+      setCurrentProductId(route.productId);
       setCollectionPreset(null);
-
-      if (productId) {
-        setCurrentView("product");
-      } else if (path.startsWith("/admin") || hash.startsWith("#/admin") || hash.startsWith("#admin")) {
-        setCurrentView("admin");
-      } else if (path.includes("/collection/alankritha") || hash.includes("alankritha")) {
-        setCurrentView("collection_alankritha");
-      } else if (path.includes("/collection/ayanaa") || hash.includes("ayanaa")) {
-        setCurrentView("collection_ayanaa");
-      } else {
-        setCurrentView("store");
-      }
+      setCurrentView(route.view);
     };
 
     handleRouteChange();
@@ -304,6 +290,7 @@ export default function App() {
     setMyOrderIds((prev) => [order.id, ...prev]);
     setUnreadCount((prev) => prev + 1);
     setAppliedPromoCode(undefined);
+    setBagCouponCode(undefined);
   };
 
   const handleOpenInbox = () => {
@@ -421,6 +408,19 @@ export default function App() {
         )}
         </Suspense>
 
+        {/* VIEW E: UNKNOWN ADDRESS (404) */}
+        {currentView === "not_found" && (
+          <NotFoundPage
+            id="page-not-found"
+            eyebrow="Page not found"
+            title="We couldn't find that page"
+            message="The link may be mistyped or out of date. Explore our collections, or head back to the homepage."
+            documentTitle={`Page not found | ${BOUTIQUE_CONFIG.brandName}`}
+            onNavigateHome={() => navigateTo("store")}
+            onNavigateCollection={navigateToCollection}
+          />
+        )}
+
         {/* VIEW C: MAIN ANVAYA HOMEPAGE */}
         {currentView === "store" && (
           <>
@@ -487,6 +487,8 @@ export default function App() {
         cartItems={cart}
         onUpdateQuantity={handleUpdateCartQuantity}
         onRemoveItem={handleRemoveFromCart}
+        couponCode={bagCouponCode}
+        onCouponChange={setBagCouponCode}
         onCheckout={(code) => {
           setAppliedPromoCode(code);
           setIsCartOpen(false);

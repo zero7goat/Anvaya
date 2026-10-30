@@ -418,7 +418,7 @@ export default function CheckoutModal({
                     setCustomerName(e.target.value);
                     edited("name");
                   }}
-                  className="field"
+                  className="field field-touch"
                 />
               </div>
 
@@ -440,7 +440,7 @@ export default function CheckoutModal({
                       setCustomerPhone(e.target.value);
                       edited("phone");
                     }}
-                    className="field tabular-nums"
+                    className="field field-touch tabular-nums"
                   />
                 </div>
                 <div>
@@ -458,7 +458,7 @@ export default function CheckoutModal({
                       setCustomerEmail(e.target.value);
                       edited("email");
                     }}
-                    className="field"
+                    className="field field-touch"
                   />
                 </div>
               </div>
@@ -479,7 +479,7 @@ export default function CheckoutModal({
                     setAddress(e.target.value);
                     edited("address");
                   }}
-                  className="field"
+                  className="field field-touch"
                 />
               </div>
 
@@ -500,7 +500,7 @@ export default function CheckoutModal({
                       setCity(e.target.value);
                       edited("city");
                     }}
-                    className="field"
+                    className="field field-touch"
                   />
                 </div>
                 <div>
@@ -518,7 +518,7 @@ export default function CheckoutModal({
                       setState(e.target.value);
                       edited("state");
                     }}
-                    className="field"
+                    className="field field-touch"
                   />
                 </div>
                 <div>
@@ -538,7 +538,7 @@ export default function CheckoutModal({
                       setPincode(e.target.value);
                       edited("pincode");
                     }}
-                    className="field tabular-nums"
+                    className="field field-touch tabular-nums"
                   />
                 </div>
               </div>

@@ -3,7 +3,7 @@ import {
   Package, ShoppingBag, AlertTriangle, CheckCircle2, Clock, 
   Search, Plus, Edit2, Trash2, Eye, EyeOff, LogOut, ArrowLeft, 
   Filter, Check, X, RefreshCw, Smartphone, ExternalLink,
-  ChevronRight, Layers, DollarSign, Store, Menu
+  ChevronRight, Layers, DollarSign, Store, Menu, Bell, BellOff, Volume2, VolumeX
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { OVERLAY_MOTION } from "../utils/motion";
@@ -22,6 +22,9 @@ import { FloralSprig } from "./decor/Motifs";
 import { BOX_INPUT, DomeBorder, LabelledBox } from "./AuthFormParts";
 import { getProductImage } from "../data/imageRegistry";
 import { ALL_SIZES, FREE_SIZE, describeSize, getSizeOptions, getSizeOptionsFor } from "../utils/productDisplay";
+import { useNewOrderAlerts, type NotificationState } from "../hooks/useNewOrderAlerts";
+import { ORDER_POLL_MS } from "../services/orderAlerts";
+import { ACCEPTED_IMAGE_TYPES, checkImageFile, compressImage, uploadProductImage } from "../services/imageUpload";
 
 type AdminSection = "overview" | "products" | "inventory" | "orders";
 
@@ -90,6 +93,8 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
   const [newFormProductId, setNewFormProductId] = useState("");
   const [savingProduct, setSavingProduct] = useState(false);
   const savingProductRef = useRef(false);
+  // A photo upload is in progress: the form can't be saved or closed until it finishes
+  const [imageUploading, setImageUploading] = useState(false);
 
   // Delete Confirmation Dialog state
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
@@ -136,6 +141,31 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
   useEffect(() => {
     refreshData();
   }, []);
+
+  // New-order badge, tab title, sound and notifications (only while this page is open)
+  const signedIn = authState.status === "admin";
+  const orderAlerts = useNewOrderAlerts(orders, signedIn && ordersLoad.status === "ready", activeTab === "orders", signedIn);
+
+  // While signed in, read the orders again every minute. A round is skipped while a status
+  // change is being saved (that save reads the orders itself); the timer stops on sign-out
+  // or when the dashboard is closed.
+  useEffect(() => {
+    if (!signedIn) return;
+    const timer = window.setInterval(() => {
+      if (!orderBusyRef.current) void loadOrders();
+    }, ORDER_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [signedIn]);
+
+  // Signed out: drop the orders (customer details) from memory, and ignore any read still
+  // on its way, so the next sign-in starts from a fresh list
+  useEffect(() => {
+    if (signedIn) return;
+    ordersRequest.current++;
+    setOrders([]);
+    setOrdersLoad({ status: "loading" });
+    setSelectedOrderId(null);
+  }, [signedIn]);
 
   // Once signed in, read the catalogue again as the admin, so hidden products are listed
   // too, and read the orders (which only admins can see)
@@ -333,7 +363,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
   // Save product (Create or Update) to Supabase. On failure the form stays open with what was typed.
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (savingProductRef.current) return;
+    if (savingProductRef.current || imageUploading) return;
     const checked = checkProductForm(formData);
     if (!checked.ok) {
       setFormError(checked.error);
@@ -374,7 +404,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
   };
 
   const closeProductModal = () => {
-    if (!savingProductRef.current) setIsProductModalOpen(false);
+    if (!savingProductRef.current && !imageUploading) setIsProductModalOpen(false);
   };
 
   // Handle Delete Product Confirmation
@@ -596,11 +626,11 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
   // =========================================================================
   // VIEW 2: AUTHENTICATED ADMIN DASHBOARD
   // =========================================================================
-  const sections: { id: AdminSection; label: string; count?: number }[] = [
+  const sections: { id: AdminSection; label: string; count?: number; newCount?: number }[] = [
     { id: "overview", label: "Overview" },
     { id: "products", label: "Products", count: products.length },
     { id: "inventory", label: "Inventory" },
-    { id: "orders", label: "Orders", count: orders.length },
+    { id: "orders", label: "Orders", count: orders.length, newCount: orderAlerts.unseenCount },
   ];
   const activeSection = sections.find((s) => s.id === activeTab) ?? sections[0];
 
@@ -674,6 +704,9 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                 <span className="badge badge-neutral tabular-nums">
                   {orders.length}
                 </span>
+                {orderAlerts.unseenCount > 0 && (
+                  <span className="badge badge-sale tabular-nums">{orderAlerts.unseenCount} new</span>
+                )}
               </button>
             </nav>
 
@@ -691,6 +724,9 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                 <Menu className="w-4 h-4" aria-hidden="true" />
                 <span className="sr-only">Dashboard menu, current section:</span>
                 <span>{activeSection.label}</span>
+                {orderAlerts.unseenCount > 0 && (
+                  <span className="badge badge-sale tabular-nums">{orderAlerts.unseenCount} new</span>
+                )}
               </button>
 
               <button
@@ -741,6 +777,18 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
 
       {/* Main Content Area */}
       <main className="flex-1 container-page py-8">
+        <OrderAlertBar
+          unseenCount={orderAlerts.unseenCount}
+          onViewOrders={() => {
+            orderAlerts.markSeen();
+            openSection("orders");
+          }}
+          soundOn={orderAlerts.soundOn}
+          onToggleSound={orderAlerts.toggleSound}
+          notificationState={orderAlerts.notificationState}
+          onToggleNotifications={() => void orderAlerts.toggleNotifications()}
+        />
+
         {/* Result of the latest product change */}
         {notice && (
           <div
@@ -1348,7 +1396,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
               </div>
               <button
                 onClick={closeProductModal}
-                disabled={savingProduct}
+                disabled={savingProduct || imageUploading}
                 className="btn-icon btn-icon-sm" aria-label="Close"
               >
                 <X className="w-5 h-5" />
@@ -1488,10 +1536,18 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                   aria-describedby="admin-product-image-help"
                 />
                 <p id="admin-product-image-help" className="field-help">
-                  Use a local file in public/images/products (e.g. /images/products/alk-001-front.jpg) or a full https:// URL.
-                  Leave empty to show the &ldquo;Image coming soon&rdquo; placeholder. Files mapped in
+                  Upload a photo below, or use a local file in public/images/products (e.g. /images/products/alk-001-front.jpg)
+                  or a full https:// URL. Leave empty to show the &ldquo;Image coming soon&rdquo; placeholder. Files mapped in
                   src/data/imageRegistry.ts take priority.
                 </p>
+                {/* Keyed by product, so a new form starts without the last upload's state */}
+                <React.Fragment key={editingProduct?.id ?? newFormProductId}>
+                  <ProductImageUpload
+                    productId={editingProduct?.id ?? newFormProductId}
+                    onBusyChange={setImageUploading}
+                    onUploaded={(url) => setFormData((prev) => ({ ...prev, image: url }))}
+                  />
+                </React.Fragment>
                 <div className="mt-2 flex items-center space-x-3 p-2 panel-muted">
                   {/* Shows the placeholder when empty or when the image cannot be loaded */}
                   <ProductImage
@@ -1572,14 +1628,14 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                 <button
                   type="button"
                   onClick={closeProductModal}
-                  disabled={savingProduct}
+                  disabled={savingProduct || imageUploading}
                   className="btn btn-secondary"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={savingProduct}
+                  disabled={savingProduct || imageUploading}
                   aria-busy={savingProduct}
                   className="btn btn-primary"
                 >
@@ -1870,7 +1926,7 @@ function AdminSectionMenu({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  sections: { id: AdminSection; label: string; count?: number }[];
+  sections: { id: AdminSection; label: string; count?: number; newCount?: number }[];
   activeSection: AdminSection;
   onSelect: (id: AdminSection) => void;
   email: string;
@@ -1932,6 +1988,7 @@ function AdminSectionMenu({
                           {s.count !== undefined && (
                             <span className="badge badge-neutral tabular-nums">{s.count}</span>
                           )}
+                          {!!s.newCount && <span className="badge badge-sale tabular-nums">{s.newCount} new</span>}
                           <ChevronRight className="w-4 h-4 text-muted" aria-hidden="true" />
                         </span>
                       </button>
@@ -2034,5 +2091,172 @@ function StockInput({
         invalid ? "border-danger" : "border-neutral-300"
       }`}
     />
+  );
+}
+
+// New orders since the admin last looked, plus the optional sound and browser
+// notification switches. Orders are re-read every minute while this page is open.
+function OrderAlertBar({
+  unseenCount,
+  onViewOrders,
+  soundOn,
+  onToggleSound,
+  notificationState,
+  onToggleNotifications,
+}: {
+  unseenCount: number;
+  onViewOrders: () => void;
+  soundOn: boolean;
+  onToggleSound: () => void;
+  notificationState: NotificationState;
+  onToggleNotifications: () => void;
+}) {
+  const notificationLabel = {
+    on: "Notifications on",
+    off: "Turn on notifications",
+    blocked: "Notifications blocked in browser settings",
+    unsupported: "Notifications not available on this device",
+  }[notificationState];
+
+  return (
+    <div className="mb-6 space-y-2" id="order-alerts">
+      {unseenCount > 0 && (
+        <div className="status-note status-note-warning" role="status">
+          <Bell className="w-4 h-4 shrink-0" aria-hidden="true" />
+          <span className="flex-1 font-semibold">
+            {unseenCount} new order{unseenCount === 1 ? "" : "s"} since you last checked
+          </span>
+          <button type="button" onClick={onViewOrders} className="btn btn-primary btn-sm">
+            View orders
+          </button>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted">
+        <span>New orders are checked every minute while this page is open.</span>
+        <button type="button" onClick={onToggleSound} aria-pressed={soundOn} className="btn btn-ghost btn-sm">
+          {soundOn ? <Volume2 className="w-3.5 h-3.5" aria-hidden="true" /> : <VolumeX className="w-3.5 h-3.5" aria-hidden="true" />}
+          {soundOn ? "Sound on" : "Sound off"}
+        </button>
+        <button
+          type="button"
+          onClick={onToggleNotifications}
+          disabled={notificationState === "blocked" || notificationState === "unsupported"}
+          aria-pressed={notificationState === "on"}
+          className="btn btn-ghost btn-sm"
+        >
+          {notificationState === "on" ? <Bell className="w-3.5 h-3.5" aria-hidden="true" /> : <BellOff className="w-3.5 h-3.5" aria-hidden="true" />}
+          {notificationLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Upload a product photo to Supabase Storage (services/imageUpload.ts). The photo is shrunk
+// to WebP in the browser first; when the upload works its address fills the image field
+// above, and the product is saved as usual. Nothing here deletes older photos.
+function ProductImageUpload({
+  productId,
+  onUploaded,
+  onBusyChange,
+}: {
+  productId: string;
+  onUploaded: (url: string) => void;
+  onBusyChange: (busy: boolean) => void;
+}) {
+  const [stage, setStage] = useState<"idle" | "preparing" | "uploading" | "done" | "error">("idle");
+  const [progress, setProgress] = useState(0);
+  const [message, setMessage] = useState("");
+  const [preview, setPreview] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const busy = stage === "preparing" || stage === "uploading";
+
+  // The local preview is a temporary browser address: release it when replaced or closed
+  useEffect(() => () => {
+    if (preview) URL.revokeObjectURL(preview);
+  }, [preview]);
+
+  useEffect(() => {
+    onBusyChange(busy);
+  }, [busy]);
+  useEffect(() => () => onBusyChange(false), []);
+
+  const handleFile = async (file: File | undefined) => {
+    if (inputRef.current) inputRef.current.value = ""; // the same file can be picked again
+    if (!file || busy) return;
+    const problem = checkImageFile(file);
+    if (problem) {
+      setStage("error");
+      setMessage(problem);
+      return;
+    }
+    setStage("preparing");
+    setMessage("");
+    setProgress(0);
+    const prepared = await compressImage(file);
+    if (!prepared.ok) {
+      setStage("error");
+      setMessage(prepared.error);
+      return;
+    }
+    setPreview(URL.createObjectURL(prepared.blob));
+    setStage("uploading");
+    const result = await uploadProductImage(productId, prepared.blob, setProgress);
+    if (result.ok) {
+      onUploaded(result.url);
+      setStage("done");
+      setMessage(`Uploaded (${Math.round(prepared.blob.size / 1024)} KB WebP). Save the product to use it.`);
+    } else {
+      setStage("error");
+      setMessage(result.error);
+    }
+  };
+
+  return (
+    <div className="mt-2 panel-muted p-3 space-y-2" id="admin-product-image-upload">
+      <div className="flex flex-wrap items-center gap-3">
+        <label className={`btn btn-secondary btn-sm ${busy ? "opacity-60 pointer-events-none" : "cursor-pointer"}`}>
+          <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+          <span>{busy ? "Uploading…" : "Upload photo"}</span>
+          <input
+            ref={inputRef}
+            type="file"
+            accept={ACCEPTED_IMAGE_TYPES.join(",")}
+            className="sr-only"
+            disabled={busy}
+            onChange={(e) => void handleFile(e.target.files?.[0])}
+            aria-describedby="admin-product-image-upload-help"
+          />
+        </label>
+        <span id="admin-product-image-upload-help" className="text-xs text-muted">
+          JPEG, PNG or WebP. Saved as WebP, at most 1600px and 5 MB.
+        </span>
+      </div>
+
+      {(busy || preview) && (
+        <div className="flex items-center gap-3">
+          {preview && <img src={preview} alt="Photo being uploaded" className="w-12 h-16 object-cover rounded-xs border border-line" />}
+          {busy && (
+            <div className="flex-1 min-w-0" role="status" aria-live="polite">
+              <div className="text-xs text-muted mb-1">
+                {stage === "preparing" ? "Preparing photo…" : `Uploading… ${Math.round(progress * 100)}%`}
+              </div>
+              <progress
+                className="w-full h-1.5 accent-[var(--color-maroon-600)]"
+                max={1}
+                value={stage === "preparing" ? undefined : progress}
+                aria-label="Photo upload progress"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {message && (
+        <p className={stage === "error" ? "field-error" : "field-help !text-success"} role={stage === "error" ? "alert" : "status"}>
+          {message}
+        </p>
+      )}
+    </div>
   );
 }
