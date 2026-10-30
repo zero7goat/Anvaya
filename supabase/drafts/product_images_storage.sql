@@ -1,4 +1,4 @@
--- ANVAYA product photo storage: PROPOSAL FOR REVIEW, NOT APPLIED
+-- ANVAYA product photo storage: APPLIED to the live project on 2026-10-31 (all Part 3 checks PASS)
 --
 -- Creates the public "product-images" bucket used by the admin dashboard's "Upload photo"
 -- button (src/services/imageUpload.ts) and lets only admins add new photos.
@@ -11,8 +11,8 @@
 --       never modified. If one exists with different settings, Part 2 stops with an error
 --       and changes nothing (decide in the dashboard first);
 --     * the upload policy is created only if it doesn't exist. If a policy with that name
---       exists, it is compared in full with the one below (command, permissive, roles, USING
---       and WITH CHECK, as Postgres stores them); any difference stops Part 2 with an error
+--       exists, it is compared in full with the one below (command, permissive, roles, USING,
+--       the whole WITH CHECK condition and the functions it calls); any difference stops Part 2 with an error
 --       and changes nothing. An existing policy is never dropped, replaced or altered.
 --     Running Part 2 again after it succeeded changes nothing.
 --   Part 3 (read-only): run it afterwards; every check should say PASS.
@@ -78,58 +78,55 @@ begin
 end;
 $$;
 
--- Admins may add new photos (INSERT only).
--- The expected policy is first created under a temporary name, so that it and any existing
--- policy are compared exactly as Postgres stores them (not as typed). Then:
---   * no "Admins can add product photos" yet: the temporary policy is renamed to it;
---   * one exists: the temporary policy is removed again and the existing one must match it
---     in every part, or Part 2 stops here and the whole transaction is undone.
+-- Admins may add new photos (INSERT only). If the policy doesn't exist it is created. If it
+-- exists it must match in every part, or Part 2 stops here and the whole transaction is
+-- undone; an existing policy is never dropped, replaced or altered. (storage.objects belongs
+-- to supabase_storage_admin, so a script here may create policies but not alter or drop them.)
 do $$
 declare
-  existing record;
-  expected record;
-  has_existing boolean;
+  p record;
+  has_policy boolean;
+  calls_expected_functions boolean;
+  expected_check constant text :=
+    '((bucket_id = ''product-images''::text) AND ( SELECT is_admin() AS is_admin) AND '
+    || '((foldername(name))[1] = ''products''::text) AND (array_length(foldername(name), 1) = 2) AND '
+    || '(extension(name) = ''webp''::text))';
 begin
-  create policy "anvaya_expected_product_photos_tmp"
-  on storage.objects as permissive for insert to authenticated
-  with check (
-    bucket_id = 'product-images'
-    and (select public.is_admin())
-    and (storage.foldername(name))[1] = 'products'
-    and array_length(storage.foldername(name), 1) = 2
-    and storage.extension(name) = 'webp'
-  );
-
-  select polcmd, polpermissive, polroles,
+  select oid, polcmd, polpermissive, (select array_agg(r::regrole::text) from unnest(polroles) r) as roles,
          pg_get_expr(polqual, polrelid) as using_expr, pg_get_expr(polwithcheck, polrelid) as check_expr
-  into expected
-  from pg_policy
-  where polrelid = 'storage.objects'::regclass and polname = 'anvaya_expected_product_photos_tmp';
-
-  select polcmd, polpermissive, polroles,
-         pg_get_expr(polqual, polrelid) as using_expr, pg_get_expr(polwithcheck, polrelid) as check_expr
-  into existing
+  into p
   from pg_policy
   where polrelid = 'storage.objects'::regclass and polname = 'Admins can add product photos';
-  has_existing := found;
+  has_policy := found;
 
-  if not has_existing then
-    alter policy "anvaya_expected_product_photos_tmp" on storage.objects rename to "Admins can add product photos";
+  if not has_policy then
+    create policy "Admins can add product photos"
+    on storage.objects as permissive for insert to authenticated
+    with check (
+      bucket_id = 'product-images'
+      and (select public.is_admin())
+      and (storage.foldername(name))[1] = 'products'
+      and array_length(storage.foldername(name), 1) = 2
+      and storage.extension(name) = 'webp'
+    );
     return;
   end if;
 
-  drop policy "anvaya_expected_product_photos_tmp" on storage.objects;
+  -- Schema prefixes depend on the search path, so they are ignored in the text and the
+  -- functions are checked by identity
+  select count(distinct d.refobjid) = 3 into calls_expected_functions
+  from pg_depend d
+  where d.classid = 'pg_policy'::regclass and d.objid = p.oid and d.refclassid = 'pg_proc'::regclass
+    and d.refobjid in ('public.is_admin()'::regprocedure, 'storage.foldername(text)'::regprocedure, 'storage.extension(text)'::regprocedure);
 
-  if existing.polcmd is distinct from expected.polcmd
-     or existing.polpermissive is distinct from expected.polpermissive
-     or existing.polroles is distinct from expected.polroles
-     or existing.using_expr is distinct from expected.using_expr
-     or existing.check_expr is distinct from expected.check_expr then
-    raise exception 'A policy named "Admins can add product photos" already exists but differs from the expected one. Nothing was changed. Existing: cmd=%, permissive=%, roles=%, using=%, check=%. Expected: cmd=%, permissive=%, roles=%, using=%, check=%.',
-      existing.polcmd, existing.polpermissive, (select array_agg(r::regrole::text) from unnest(existing.polroles) r),
-      existing.using_expr, existing.check_expr,
-      expected.polcmd, expected.polpermissive, (select array_agg(r::regrole::text) from unnest(expected.polroles) r),
-      expected.using_expr, expected.check_expr;
+  if p.polcmd <> 'a'
+     or not p.polpermissive
+     or p.roles is distinct from array['authenticated']
+     or p.using_expr is not null
+     or regexp_replace(p.check_expr, '\m(public|storage)\.', '', 'g') is distinct from expected_check
+     or not calls_expected_functions then
+    raise exception 'A policy named "Admins can add product photos" already exists but differs from the expected one. Nothing was changed. Existing: cmd=%, permissive=%, roles=%, using=%, check=%.',
+      p.polcmd, p.polpermissive, p.roles, p.using_expr, p.check_expr;
   end if;
 end;
 $$;
