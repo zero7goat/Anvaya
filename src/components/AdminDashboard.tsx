@@ -22,6 +22,7 @@ import { FloralSprig } from "./decor/Motifs";
 import { BOX_INPUT, DomeBorder, LabelledBox } from "./AuthFormParts";
 import { getProductImage } from "../data/imageRegistry";
 import { ALL_SIZES, FREE_SIZE, describeSize, getSizeOptions, getSizeOptionsFor } from "../utils/productDisplay";
+import { filterInventory } from "../utils/inventorySearch";
 import { useNewOrderAlerts, type NotificationState } from "../hooks/useNewOrderAlerts";
 import { ORDER_POLL_MS } from "../services/orderAlerts";
 import { ACCEPTED_IMAGE_TYPES, checkImageFile, compressImage, uploadProductImage } from "../services/imageUpload";
@@ -64,6 +65,8 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
   const [prodCategoryFilter, setProdCategoryFilter] = useState("All");
   const [prodCollectionFilter, setProdCollectionFilter] = useState<"All" | "alankritha" | "ayanaa">("All");
   const [prodStatusFilter, setProdStatusFilter] = useState<"All" | "enabled" | "disabled">("All");
+
+  const [inventorySearch, setInventorySearch] = useState("");
 
   // Search & Filter states for orders
   const [orderSearch, setOrderSearch] = useState("");
@@ -274,6 +277,8 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
       return true;
     });
   }, [products, prodCategoryFilter, prodCollectionFilter, prodStatusFilter, prodSearch]);
+
+  const inventoryProducts = useMemo(() => filterInventory(products, inventorySearch), [products, inventorySearch]);
 
   // Filtered orders list
   const filteredOrders = useMemo(() => {
@@ -1176,8 +1181,35 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
               <p className="text-xs text-neutral-500 mt-0.5">
                 Quickly adjust variant quantities, restock batches, or zero-out depleted styles.
               </p>
+              <div className="relative mt-4">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" aria-hidden="true" />
+                <input
+                  type="text"
+                  placeholder="Search by product name, ID, or collection..."
+                  aria-label="Search inventory"
+                  value={inventorySearch}
+                  onChange={(e) => setInventorySearch(e.target.value)}
+                  className={`field field-sm field-touch pl-9 ${inventorySearch ? "pr-9" : ""}`}
+                  id="admin-inventory-search"
+                />
+                {inventorySearch && (
+                  <button
+                    type="button"
+                    onClick={() => setInventorySearch("")}
+                    aria-label="Clear inventory search"
+                    className="btn-icon btn-icon-sm absolute right-1 top-1/2 -translate-y-1/2"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
 
+            {inventoryProducts.length === 0 ? (
+              <div className="panel p-8 text-center text-sm text-muted" role="status">
+                No products found
+              </div>
+            ) : (
             <div className="panel overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="ds-table ds-table-stack">
@@ -1191,7 +1223,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line">
-                    {products.map((p) => {
+                    {inventoryProducts.map((p) => {
                       const total = productService.getTotalStock(p);
                       return (
                         <tr key={p.id}>
@@ -1255,6 +1287,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                 </table>
               </div>
             </div>
+            )}
           </div>
         )}
 
