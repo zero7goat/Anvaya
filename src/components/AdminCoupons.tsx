@@ -28,6 +28,9 @@ export default function AdminCoupons() {
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState<CouponForm>(EMPTY_FORM);
   const [formError, setFormError] = useState("");
+  // The coupon waiting for a second click to delete. Asked on the page, not with a browser
+  // pop-up, because some browsers block pop-ups and the delete would silently do nothing.
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
 
   const load = async () => {
     const result = await couponAdmin.list();
@@ -85,10 +88,11 @@ export default function AdminCoupons() {
   };
 
   const handleDelete = async (coupon: Coupon) => {
-    if (busy || !window.confirm(`Delete coupon ${coupon.code}? Past orders keep their discount. This can't be undone.`)) return;
+    if (busy) return;
     setBusy(true);
     const result = await couponAdmin.remove(coupon.code);
     setBusy(false);
+    setConfirmingDelete(null);
     setNotice(result.ok ? { kind: "success", text: `Deleted coupon ${coupon.code}.` } : { kind: "error", text: result.error });
     await load();
   };
@@ -173,6 +177,25 @@ export default function AdminCoupons() {
         </form>
       )}
 
+      {confirmingDelete && (
+        <div className="status-note status-note-danger" role="alert" id="admin-coupon-delete-confirm">
+          <span className="flex-1">Delete coupon {confirmingDelete}? Past orders keep their discount. This can't be undone.</span>
+          <button type="button" onClick={() => setConfirmingDelete(null)} disabled={busy} className="btn btn-secondary btn-sm">Keep</button>
+          <button
+            type="button"
+            onClick={() => {
+              const coupon = coupons?.find((c) => c.code === confirmingDelete);
+              if (coupon) void handleDelete(coupon);
+            }}
+            disabled={busy}
+            aria-busy={busy}
+            className="btn btn-primary btn-sm"
+          >
+            {busy ? "Deleting…" : "Yes, Delete"}
+          </button>
+        </div>
+      )}
+
       {loadError ? (
         <div className="status-note status-note-danger" role="alert">
           <span className="flex-1">{loadError}</span>
@@ -222,7 +245,7 @@ export default function AdminCoupons() {
                         <button type="button" onClick={() => openForm(c)} disabled={busy} className="btn-icon btn-icon-sm" aria-label={`Edit coupon ${c.code}`} title="Edit coupon">
                           <Edit2 className="w-4 h-4" />
                         </button>
-                        <button type="button" onClick={() => void handleDelete(c)} disabled={busy} className="btn-icon btn-icon-sm" aria-label={`Delete coupon ${c.code}`} title="Delete coupon">
+                        <button type="button" onClick={() => setConfirmingDelete(c.code)} disabled={busy} className="btn-icon btn-icon-sm" aria-label={`Delete coupon ${c.code}`} title="Delete coupon">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
