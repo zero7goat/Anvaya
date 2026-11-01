@@ -49,27 +49,28 @@ export const BOUTIQUE_CONFIG = {
   whatsappNumber: "919620828013",
 
   // Customer Support Contact Details
-  // OWNER TO SUPPLY: the real ANVAYA support email address. Left empty on purpose (the
-  // old care@alankrita.com belonged to the previous brand); while it is empty the site
-  // hides every email link and offers phone and WhatsApp instead.
-  supportEmail: "" as string,
+  supportEmail: "customer.anvaya@gmail.com",
   supportPhone: "+91 9620828013",
   supportHours: "10:00 AM - 8:00 PM IST",
   storeLocation: "Ballari, Karnataka, India",
 
-  // Shipping & Pricing Rules
+  // ANVAYA is a collaboration between its two owners
+  anvayaOwner: "Pooja",
+  alankrithaOwner: "S Shobha",
+
+  // Pricing (shipping is free on every order)
   currencySymbol: "₹",
-  freeShippingThreshold: 1999, // Free shipping on orders >= ₹1,999
-  standardShippingFee: 99,     // Shipping fee below threshold
 
   // Payment Options Supported in Frontend Phase
+  // Cash on Delivery is off for now: orders are placed by WhatsApp enquiry, and payment is
+  // arranged in that chat.
   paymentMethods: [
     {
       id: "cod",
       label: "Cash on Delivery (COD)",
       description: "Pay with cash or UPI upon home delivery",
       isDefault: true,
-      enabled: true,
+      enabled: false,
     },
   ],
   // Hosting: static site on Cloudflare Pages; products, stock and orders live in Supabase.

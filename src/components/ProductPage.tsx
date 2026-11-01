@@ -133,7 +133,7 @@ function ProductDetails({
     return () => clearTimeout(timer);
   }, [addedSuccess]);
 
-  // Add to Cart / Buy Now pressed before choosing a size: say so under the sizes, bring
+  // Add to Cart / Order on WhatsApp pressed before choosing a size: say so under the sizes, bring
   // them into view and put focus on the first size that can be chosen
   const [sizePrompt, setSizePrompt] = useState(false);
   const sizeGroupRef = useRef<HTMLFieldSetElement>(null);
@@ -242,15 +242,12 @@ function ProductDetails({
                   </button>
                 )}
               </div>
-              <ul className="mt-4 -mx-4 px-2 grid grid-cols-3 border-y border-line bg-surface text-2xs font-semibold text-ink">
+              <ul className={`mt-4 -mx-4 px-2 grid ${codEnabled ? "grid-cols-3" : "grid-cols-2"} border-y border-line bg-surface text-2xs font-semibold text-ink`}>
                 <li className="flex items-center justify-center gap-1.5 py-3 text-center">
                   <Truck className="w-4 h-4 shrink-0" strokeWidth={1.6} aria-hidden="true" />
-                  <span>
-                    Free Shipping
-                    <span className="block font-normal text-muted">above {formatINR(BOUTIQUE_CONFIG.freeShippingThreshold)}</span>
-                  </span>
+                  <span>Free Shipping</span>
                 </li>
-                <li className="flex items-center justify-center gap-1.5 py-3 text-center border-x border-line">
+                <li className={`flex items-center justify-center gap-1.5 py-3 text-center border-line ${codEnabled ? "border-x" : "border-l"}`}>
                   <MapPin className="w-4 h-4 shrink-0" strokeWidth={1.6} aria-hidden="true" />
                   <span>Delivering across India</span>
                 </li>
@@ -402,18 +399,18 @@ function ProductDetails({
                   <button
                     type="button"
                     onClick={handleBuyNow}
-                    className="btn btn-secondary"
+                    className="btn btn-whatsapp"
                   >
-                    Buy Now
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    Order on WhatsApp
                   </button>
                   <a
                     href={whatsappLink}
                     target="_blank"
                     rel="noreferrer"
-                    className="btn btn-whatsapp"
+                    className="btn btn-secondary"
                   >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    WhatsApp Enquiry
+                    Ask a Question
                   </a>
                 </div>
               </div>

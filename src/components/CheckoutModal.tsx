@@ -726,7 +726,7 @@ export default function CheckoutModal({
                   <span>Direct from the boutique</span>
                 </div>
                 <p>
-                  Free shipping on orders of ₹{BOUTIQUE_CONFIG.freeShippingThreshold.toLocaleString("en-IN")} or more. Pay by cash or UPI on delivery.
+                  Free shipping. Pay by cash or UPI on delivery.
                 </p>
               </div>
 

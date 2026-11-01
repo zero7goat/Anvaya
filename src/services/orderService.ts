@@ -1,15 +1,21 @@
 import type { Order } from "../types";
 import { BOUTIQUE_CONFIG } from "../config";
 import { FREE_SIZE } from "../utils/sizes";
+import { buildOrderEnquiry } from "../utils/whatsappEnquiry";
 
 /**
- * WhatsApp links for the boutique. Orders themselves are recorded only by the database
- * (see ./orderApi.ts); the order message is built from an order the database has
- * already saved, so WhatsApp is a notification, never the order itself.
+ * WhatsApp links for the boutique. Customers order by WhatsApp enquiry for now, so the
+ * storefront uses generateWhatsAppEnquiryUrl and saves nothing. The links for saved orders
+ * belong to online checkout (see ./orderApi.ts), which is switched off.
  */
 const whatsappUrl = (text: string) => `https://wa.me/${BOUTIQUE_CONFIG.whatsappNumber.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`;
 
 export const orderService = {
+  /** WhatsApp link that places an order enquiry for the given pieces */
+  generateWhatsAppEnquiryUrl(params: Omit<Parameters<typeof buildOrderEnquiry>[0], "brandName">): string {
+    return whatsappUrl(buildOrderEnquiry({ brandName: BOUTIQUE_CONFIG.brandName, ...params }));
+  },
+
   /**
    * WhatsApp link for a question about one product (optionally a chosen size).
    * Same message as the original product-detail modal.

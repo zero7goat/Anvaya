@@ -6,8 +6,9 @@ import Footer from "./components/Footer";
 import CartDrawer from "./components/CartDrawer";
 import { CartActionsContext } from "./context/CartActionsContext";
 
-import { Product, CartItem, Order, CollectionType } from "./types";
+import { Product, CartItem, CollectionType } from "./types";
 import { productService } from "./services/productService";
+import { orderService } from "./services/orderService";
 import { BOUTIQUE_CONFIG } from "./config";
 import { smoothScroll } from "./utils/smoothScroll";
 import { getProductPath } from "./utils/productDisplay";
@@ -23,18 +24,18 @@ import {
   toStoredCart,
 } from "./utils/cart";
 import { loadSavedCoupon, saveCoupon } from "./utils/savedCoupon";
-import { resolveRoute, type ViewState } from "./utils/routes";
+import { calculateCartTotals } from "./utils/pricing";
+import { POLICY_LINKS, resolveRoute, type ViewState } from "./utils/routes";
 import NotFoundPage from "./components/NotFoundPage";
 
 // Screens most visitors never open load on first use, keeping the first page light
 const AdminDashboard = lazy(() => import("./components/AdminDashboard"));
-const CheckoutModal = lazy(() => import("./components/CheckoutModal"));
-const InboxDrawer = lazy(() => import("./components/InboxDrawer"));
 const LoginModal = lazy(() => import("./components/LoginModal"));
 // Collection and product pages, and Quick View, load when first shown
 const CollectionPage = lazy(() => import("./components/CollectionPage"));
 const ProductPage = lazy(() => import("./components/ProductPage"));
 const QuickView = lazy(() => import("./components/QuickView"));
+const PolicyPage = lazy(() => import("./components/PolicyPage"));
 
 // The cart survives a refresh: only product IDs, sizes and quantities are kept, and
 // they are re-checked against the live catalogue (price, stock) when read back.
@@ -65,22 +66,16 @@ export default function App() {
 
   // Storefront Data State
   const [products, setProducts] = useState<Product[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
 
-  // Cart & Checkout State
+  // Cart State
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
-  const [isCheckoutOpen, setIsCheckoutOpen] = useState<boolean>(false);
-  // Only the code is passed on: checkout recalculates the discount for the cart it shows
-  const [appliedPromoCode, setAppliedPromoCode] = useState<string | undefined>(undefined);
   // The code applied in the bag, kept across reloads (see utils/savedCoupon.ts)
   const [bagCouponCode, setBagCouponCode] = useState<string | undefined>(loadSavedCoupon);
   useEffect(() => saveCoupon(bagCouponCode), [bagCouponCode]);
   const cartHydrated = useRef(false);
-  // Orders placed in this browser during this visit (shown under "Order updates")
-  const [myOrderIds, setMyOrderIds] = useState<string[]>([]);
-  // Lazily loaded overlays stay mounted once opened, so their state and exit animations survive
-  const [loadedOverlays, setLoadedOverlays] = useState({ checkout: false, inbox: false, login: false });
+  // The sign-in page stays mounted once opened, so its state and exit animation survive
+  const [loginLoaded, setLoginLoaded] = useState(false);
 
   // Modals & Drawers
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
@@ -89,10 +84,8 @@ export default function App() {
   useEffect(() => {
     if (quickViewProduct) setQuickViewLoaded(true);
   }, [quickViewProduct]);
-  const [isInboxOpen, setIsInboxOpen] = useState<boolean>(false);
   const [isLoginOpen, setIsLoginOpen] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
-  const [unreadCount, setUnreadCount] = useState<number>(0);
   // Style to preselect when a collection page is opened from a style link (footer);
   // `id` changes on every request so the page re-mounts with that style
   const [collectionPreset, setCollectionPreset] = useState<{ style: string; id: number } | null>(null);
@@ -129,14 +122,8 @@ export default function App() {
   }, [cart]);
 
   useEffect(() => {
-    if (isCheckoutOpen || isInboxOpen || isLoginOpen) {
-      setLoadedOverlays((prev) => ({
-        checkout: prev.checkout || isCheckoutOpen,
-        inbox: prev.inbox || isInboxOpen,
-        login: prev.login || isLoginOpen,
-      }));
-    }
-  }, [isCheckoutOpen, isInboxOpen, isLoginOpen]);
+    if (isLoginOpen) setLoginLoaded(true);
+  }, [isLoginOpen]);
 
   useEffect(() => {
     let active = true;
@@ -179,7 +166,10 @@ export default function App() {
     setCollectionPreset(null);
     smoothScroll.scrollToTop();
 
-    if (view === "product" && productId) {
+    const policy = POLICY_LINKS.find((link) => link.view === view);
+    if (policy) {
+      window.history.pushState({}, "", policy.path);
+    } else if (view === "product" && productId) {
       window.history.pushState({}, "", getProductPath(productId));
     } else if (view === "admin") {
       window.history.pushState({}, "", "/admin");
@@ -238,6 +228,10 @@ export default function App() {
         beforeNavigate();
         navigateToCollectionStyle(col, style);
       }}
+      onNavigatePolicy={(view) => {
+        beforeNavigate();
+        navigateTo(view);
+      }}
     />
   );
 
@@ -271,31 +265,12 @@ export default function App() {
     setCart((prevCart) => removeCartItem(prevCart, productId, size));
   };
 
-  // Review submission
-  // Buy Now: add to cart and go straight to checkout
+  // Order on WhatsApp from the product page: an enquiry for this piece alone, leaving the bag as it is
   const handleBuyNow = (product: Product, size: string, quantity: number) => {
-    handleAddToCart(product, size, quantity);
-    setIsCartOpen(false);
-    setIsCheckoutOpen(true);
-  };
-
-  // Called once the database has saved an order: the bag is emptied, and the catalogue is
-  // read again so the storefront shows the stock the order reserved
-  const handleOrderSuccess = (order: Order) => {
-    setCart([]);
-    productService.reloadCatalogue().then((reloaded) => {
-      if (reloaded) loadStorefrontData();
-    });
-    setOrders((prev) => [order, ...prev]);
-    setMyOrderIds((prev) => [order.id, ...prev]);
-    setUnreadCount((prev) => prev + 1);
-    setAppliedPromoCode(undefined);
-    setBagCouponCode(undefined);
-  };
-
-  const handleOpenInbox = () => {
-    setIsInboxOpen(true);
-    setUnreadCount(0);
+    if ((product.sizeStock?.[size] || 0) <= 0) return;
+    const items = [{ product, selectedSize: size, quantity }];
+    const { subtotal, total } = calculateCartTotals(items, null);
+    window.open(orderService.generateWhatsAppEnquiryUrl({ items, subtotal, total }), "_blank", "noopener,noreferrer");
   };
 
   // -------------------------------------------------------------
@@ -335,9 +310,7 @@ export default function App() {
         setSearchQuery={setSearchQuery}
         cartCount={totalCartCount}
         toggleCart={() => setIsCartOpen(!isCartOpen)}
-        toggleInbox={handleOpenInbox}
         toggleLogin={() => setIsLoginOpen(true)}
-        unreadEmails={unreadCount}
         categories={categoriesList}
         currentUser={currentUser}
         onLogout={() => setCurrentUser(null)}
@@ -404,6 +377,14 @@ export default function App() {
             onQuickView={openQuickView}
             onNavigateHome={() => navigateTo("store")}
             onNavigateCollection={navigateToCollection}
+          />
+        )}
+
+        {/* VIEW F: SHIPPING & RETURNS, TERMS, PRIVACY */}
+        {POLICY_LINKS.some((link) => link.view === currentView) && (
+          <PolicyPage
+            view={POLICY_LINKS.find((link) => link.view === currentView)!.view}
+            onNavigate={navigateTo}
           />
         )}
         </Suspense>
@@ -489,41 +470,11 @@ export default function App() {
         onRemoveItem={handleRemoveFromCart}
         couponCode={bagCouponCode}
         onCouponChange={setBagCouponCode}
-        onCheckout={(code) => {
-          setAppliedPromoCode(code);
-          setIsCartOpen(false);
-          setIsCheckoutOpen(true);
-        }}
       />
 
-      {/* Checkout, order updates and sign-in load the first time they are opened */}
+      {/* The account page loads the first time it is opened */}
       <Suspense fallback={null}>
-        {loadedOverlays.checkout && (
-          <CheckoutModal
-            isOpen={isCheckoutOpen}
-            onClose={() => setIsCheckoutOpen(false)}
-            cartItems={cart}
-            appliedPromoCode={appliedPromoCode}
-            onOrderSuccess={handleOrderSuccess}
-            onOpenInbox={handleOpenInbox}
-            onCatalogueChanged={() => {
-              productService.reloadCatalogue().then((reloaded) => {
-                if (reloaded) loadStorefrontData();
-              });
-            }}
-          />
-        )}
-
-        {/* The shopper's own orders from this visit (never other customers' orders) */}
-        {loadedOverlays.inbox && (
-          <InboxDrawer
-            isOpen={isInboxOpen}
-            onClose={() => setIsInboxOpen(false)}
-            orders={orders.filter((o) => myOrderIds.includes(o.id))}
-          />
-        )}
-
-        {loadedOverlays.login && (
+        {loginLoaded && (
           <LoginModal
             isOpen={isLoginOpen}
             onClose={() => setIsLoginOpen(false)}

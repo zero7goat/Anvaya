@@ -12,9 +12,7 @@ interface HeaderProps {
   setSearchQuery: (query: string) => void;
   cartCount: number;
   toggleCart: () => void;
-  toggleInbox: () => void;
   toggleLogin: () => void;
-  unreadEmails: number;
   categories: string[];
   currentUser: string | null;
   onLogout: () => void;
@@ -35,9 +33,7 @@ export default function Header({
   setSearchQuery,
   cartCount,
   toggleCart,
-  toggleInbox,
   toggleLogin,
-  unreadEmails,
   categories,
   currentUser,
   onLogout,
@@ -93,7 +89,7 @@ export default function Header({
         <span>
           Handcrafted Kurtas &amp; Sarees
           <span className="hidden sm:inline">
-            {" "}· Free Shipping Above ₹{BOUTIQUE_CONFIG.freeShippingThreshold.toLocaleString("en-IN")}
+            {" "}· Free Shipping
           </span>
         </span>
       </div>
@@ -207,12 +203,10 @@ export default function Header({
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
         cartCount={cartCount}
-        unreadEmails={unreadEmails}
         currentUser={currentUser}
         onSearch={() => setIsSearchOpen(true)}
         onAccount={currentUser ? onLogout : toggleLogin}
         onCart={toggleCart}
-        onInbox={toggleInbox}
         onHome={handleBrandClick}
         onShopCategory={onShopCategory ?? setCategory}
         onNavigateCollection={handleCollectionSelect}

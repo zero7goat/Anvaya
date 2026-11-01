@@ -7,7 +7,7 @@
  */
 export const COUPON_STORAGE_KEY = "anvaya_coupon";
 
-// Offer codes look like ALANKRITHA10 or FESTIVE500
+// Offer codes are letters and numbers, as in public.offers
 const CODE_PATTERN = /^[A-Z0-9_-]{1,32}$/;
 
 /** A stored value as a coupon code, or undefined when it isn't one */

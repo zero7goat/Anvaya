@@ -10,7 +10,10 @@ test("every page the site links to resolves to itself", () => {
   assert.equal(view("/collection/alankritha"), "collection_alankritha");
   assert.equal(view("/collection/ayanaa"), "collection_ayanaa");
   assert.equal(view("/admin"), "admin");
-  assert.deepEqual(resolveRoute("/product/alk-001", ""), { view: "product", productId: "alk-001" });
+  assert.equal(view("/shipping-and-returns"), "policy_shipping");
+  assert.equal(view("/terms-and-conditions"), "policy_terms");
+  assert.equal(view("/privacy-policy/"), "policy_privacy");
+  assert.deepEqual(resolveRoute("/product/alk-001", ""),{ view: "product", productId: "alk-001" });
   assert.deepEqual(resolveRoute("/product/a%20b", ""), { view: "product", productId: "a b" });
 });
 

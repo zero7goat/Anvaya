@@ -18,6 +18,7 @@ import {
 } from "../utils/productRules";
 import { BOUTIQUE_CONFIG } from "../config";
 import ProductImage from "./ProductImage";
+import AdminCoupons from "./AdminCoupons";
 import { FloralSprig } from "./decor/Motifs";
 import { BOX_INPUT, DomeBorder, LabelledBox } from "./AuthFormParts";
 import { getProductImage } from "../data/imageRegistry";
@@ -27,7 +28,7 @@ import { useNewOrderAlerts, type NotificationState } from "../hooks/useNewOrderA
 import { ORDER_POLL_MS } from "../services/orderAlerts";
 import { ACCEPTED_IMAGE_TYPES, checkImageFile, compressImage, uploadProductImage } from "../services/imageUpload";
 
-type AdminSection = "overview" | "products" | "inventory" | "orders";
+type AdminSection = "overview" | "products" | "inventory" | "orders" | "coupons";
 
 interface AdminDashboardProps {
   onReturnToStore: () => void;
@@ -636,6 +637,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
     { id: "products", label: "Products", count: products.length },
     { id: "inventory", label: "Inventory" },
     { id: "orders", label: "Orders", count: orders.length, newCount: orderAlerts.unseenCount },
+    { id: "coupons", label: "Coupons" },
   ];
   const activeSection = sections.find((s) => s.id === activeTab) ?? sections[0];
 
@@ -712,6 +714,14 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                 {orderAlerts.unseenCount > 0 && (
                   <span className="badge badge-sale tabular-nums">{orderAlerts.unseenCount} new</span>
                 )}
+              </button>
+              <button
+                onClick={() => setActiveTab("coupons")}
+                role="tab"
+                aria-selected={activeTab === "coupons"}
+                className="segmented-item"
+              >
+                Coupons
               </button>
             </nav>
 
@@ -1292,6 +1302,11 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
         )}
 
         {/* ========================================================================= */}
+        {/* TAB 5: COUPONS */}
+        {/* ========================================================================= */}
+        {activeTab === "coupons" && <AdminCoupons />}
+
+        {/* ========================================================================= */}
         {/* TAB 4: ORDERS MANAGEMENT */}
         {/* ========================================================================= */}
         {activeTab === "orders" && (
@@ -1302,7 +1317,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                   Customer Orders & Fulfillment
                 </h2>
                 <p className="text-xs text-neutral-500 mt-0.5">
-                  Review COD orders, check delivery addresses, and update fulfillment states.
+                  Review orders, check delivery addresses, and update fulfillment states.
                 </p>
               </div>
 

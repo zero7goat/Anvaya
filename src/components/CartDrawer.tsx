@@ -1,9 +1,10 @@
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { OVERLAY_MOTION } from "../utils/motion";
-import { X, ShoppingBag, Trash2, ArrowRight, Tag, CheckCircle, AlertCircle } from "lucide-react";
+import { X, ShoppingBag, Trash2, MessageSquare, Tag, CheckCircle, AlertCircle } from "lucide-react";
 import { CartItem, Offer } from "../types";
 import { offerService } from "../services/offerService";
+import { orderService } from "../services/orderService";
 import ProductImage from "./ProductImage";
 import { getProductImage } from "../data/imageRegistry";
 import { BOUTIQUE_CONFIG } from "../config";
@@ -19,7 +20,6 @@ interface CartDrawerProps {
   // The applied coupon code, kept by the app across reloads; only the code is kept
   couponCode?: string;
   onCouponChange: (code: string | undefined) => void;
-  onCheckout: (appliedPromoCode?: string) => void;
 }
 
 export default function CartDrawer({
@@ -30,7 +30,6 @@ export default function CartDrawer({
   onRemoveItem,
   couponCode,
   onCouponChange,
-  onCheckout,
 }: CartDrawerProps) {
   const [promoCode, setPromoCode] = useState<string>(couponCode ?? "");
   const [promoError, setPromoError] = useState<string>("");
@@ -39,15 +38,33 @@ export default function CartDrawer({
   const panelRef = useRef<HTMLDivElement>(null);
   useOverlay(isOpen, onClose, panelRef);
 
-  // A saved code is looked up again on every render, against today's offers and this bag,
-  // so an expired or ineligible coupon never gives a discount. Checkout then has the
-  // database price the order with the code, which is what the customer actually pays.
-  const activeOffer: Offer | null = couponCode ? offerService.findActiveOfferByCode(couponCode) : null;
-  const couponUnavailable = Boolean(couponCode) && !activeOffer;
+  // The coupon box shows only while a coupon is switched on in the admin dashboard. Each time
+  // the bag opens, the saved code is looked up again, so an expired or ineligible coupon
+  // never gives a discount. The boutique confirms the final amount on WhatsApp.
+  const [couponsAvailable, setCouponsAvailable] = useState(false);
+  const [activeOffer, setActiveOffer] = useState<Offer | null>(null);
+  const [couponLookedUp, setCouponLookedUp] = useState(false);
+  useEffect(() => {
+    if (!isOpen) return;
+    let current = true;
+    offerService.lookup(couponCode).then(({ available, offer }) => {
+      if (!current) return;
+      setCouponsAvailable(available);
+      setActiveOffer(offer);
+      setCouponLookedUp(true);
+      if (!available && couponCode) onCouponChange(undefined); // nothing to apply any more
+    });
+    return () => {
+      current = false;
+    };
+  }, [isOpen, couponCode]);
+  useEffect(() => {
+    if (!couponCode) setActiveOffer(null); // removed, or cleared after an order
+  }, [couponCode]);
+  const couponUnavailable = couponLookedUp && Boolean(couponCode) && !activeOffer;
 
-  // Same rules as checkout: subtotal, coupon (re-checked as the bag changes), shipping
-  const { subtotal, discount: discountAmount, shipping: shippingCost, total: grandTotal, amountToFreeShipping } =
-    calculateCartTotals(cartItems, activeOffer, BOUTIQUE_CONFIG);
+  // Subtotal and coupon, re-checked as the bag changes; shipping is always free
+  const { subtotal, discount: discountAmount, total: grandTotal } = calculateCartTotals(cartItems, activeOffer);
   // An applied coupon the bag no longer qualifies for (e.g. after removing a piece)
   const couponNoLongerApplies = activeOffer ? getOfferIneligibility(activeOffer, subtotal) : null;
 
@@ -59,7 +76,7 @@ export default function CartDrawer({
     setPromoError("");
 
     try {
-      const matched = offerService.findActiveOfferByCode(promoCode);
+      const { offer: matched } = await offerService.lookup(promoCode);
 
       if (!matched) {
         setPromoError("Invalid coupon or code expired.");
@@ -68,6 +85,7 @@ export default function CartDrawer({
         setPromoError(getOfferIneligibility(matched, subtotal)!);
         onCouponChange(undefined);
       } else {
+        setActiveOffer(matched);
         onCouponChange(matched.code);
       }
     } catch (err) {
@@ -83,9 +101,14 @@ export default function CartDrawer({
     setPromoError("");
   };
 
-  const handleCheckoutClick = () => {
-    onCheckout(discountAmount > 0 ? activeOffer?.code : undefined);
-  };
+  // Orders are placed by WhatsApp enquiry, with the bag as the bag shows it
+  const enquiryUrl = orderService.generateWhatsAppEnquiryUrl({
+    items: cartItems,
+    subtotal,
+    discount: discountAmount,
+    couponCode: activeOffer?.code,
+    total: grandTotal,
+  });
 
   return (
     <AnimatePresence>
@@ -232,6 +255,7 @@ export default function CartDrawer({
             <div className="border-t border-line p-4 sm:p-6 bg-surface space-y-4" id="cart-drawer-footer">
 
               {/* Coupon Entry Field */}
+              {couponsAvailable && (
               <div className="panel-muted p-3 space-y-2" id="coupon-field-container">
                 <label htmlFor="cart-coupon-input" className="flex items-center space-x-1.5 field-label mb-0">
                   <Tag className="w-3.5 h-3.5 text-accent" aria-hidden="true" />
@@ -242,7 +266,7 @@ export default function CartDrawer({
                   <input
                     id="cart-coupon-input"
                     type="text"
-                    placeholder="e.g. ALANKRITHA10"
+                    placeholder="Enter code"
                     value={promoCode}
                     onChange={(e) => setPromoCode(e.target.value)}
                     autoCapitalize="characters"
@@ -290,6 +314,7 @@ export default function CartDrawer({
                   </button>
                 )}
               </div>
+              )}
 
               {/* Total Summary Breakdowns */}
               <div className="space-y-2 text-xs text-ink-soft" id="pricing-details">
@@ -307,20 +332,10 @@ export default function CartDrawer({
 
                 <div className="flex justify-between">
                   <span>Shipping & Handling</span>
-                  {shippingCost === 0 ? (
-                    <span className="badge badge-success">
-                      Free Shipping
-                    </span>
-                  ) : (
-                    <span className="font-semibold text-ink tabular-nums">₹{shippingCost}</span>
-                  )}
+                  <span className="badge badge-success">
+                    Free Shipping
+                  </span>
                 </div>
-
-                {shippingCost > 0 && (
-                  <div className="text-xs text-accent font-medium pt-0.5 text-right">
-                    Add ₹{amountToFreeShipping.toLocaleString("en-IN")} more for FREE home delivery.
-                  </div>
-                )}
 
                 <div className="flex justify-between items-baseline border-t border-line pt-3 text-xs font-semibold uppercase tracking-[0.12em] text-ink" id="total-price-row">
                   <span>Total Payable</span>
@@ -328,19 +343,21 @@ export default function CartDrawer({
                 </div>
               </div>
 
-              {/* Secure checkout dispatch button */}
-              <button
-                onClick={handleCheckoutClick}
-                className="btn btn-primary btn-lg btn-block"
-                id="cart-checkout-btn"
+              {/* Orders are placed in the WhatsApp chat */}
+              <a
+                href={enquiryUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-whatsapp btn-lg btn-block"
+                id="cart-whatsapp-enquiry-btn"
               >
-                <span>Checkout Wardrobe</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
+                <MessageSquare className="w-4 h-4 fill-white" aria-hidden="true" />
+                <span>Order on WhatsApp</span>
+              </a>
 
-              <div className="flex items-center justify-center space-x-1.5 text-xs text-muted">
-                <span>Cash on Delivery available · Delivering across India</span>
-              </div>
+              <p className="text-xs text-muted text-center">
+                Sends your bag to the boutique on WhatsApp. They will confirm availability, the final amount and payment. Delivering across India.
+              </p>
             </div>
           )}
 

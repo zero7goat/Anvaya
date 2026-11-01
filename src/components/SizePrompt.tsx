@@ -1,7 +1,7 @@
 import { AlertCircle } from "lucide-react";
 
 /**
- * Shown under the size buttons when Add to Cart or Buy Now is pressed before a size is
+ * Shown under the size buttons when Add to Cart or Order on WhatsApp is pressed before a size is
  * chosen (product page and Quick View). Announced to screen readers as it appears.
  */
 export default function SizePrompt({ id }: { id: string }) {

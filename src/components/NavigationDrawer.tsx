@@ -1,6 +1,6 @@
 import { Fragment, ReactNode, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Inbox, Mail, MapPin, MessageCircle, Plus, Search, ShoppingBag, User, X } from "lucide-react";
+import { Mail, MapPin, MessageCircle, Plus, Search, ShoppingBag, User, X } from "lucide-react";
 import { MOTION_TRANSITION, OVERLAY_MOTION } from "../utils/motion";
 import { BOUTIQUE_CONFIG } from "../config";
 import { CollectionType } from "../types";
@@ -10,12 +10,10 @@ interface NavigationDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   cartCount: number;
-  unreadEmails: number;
   currentUser: string | null;
   onSearch: () => void;
   onAccount: () => void;
   onCart: () => void;
-  onInbox: () => void;
   onHome: () => void;
   onShopCategory: (category: string) => void;
   onNavigateCollection: (collection: CollectionType) => void;
@@ -33,12 +31,10 @@ export default function NavigationDrawer({
   isOpen,
   onClose,
   cartCount,
-  unreadEmails,
   currentUser,
   onSearch,
   onAccount,
   onCart,
-  onInbox,
   onHome,
   onShopCategory,
   onNavigateCollection,
@@ -207,10 +203,6 @@ export default function NavigationDrawer({
               <div className="border-t-8 border-surface-muted bg-surface-muted/60 px-6 sm:px-8 py-6 space-y-1">
                 <PanelLink icon={<User className="w-5 h-5" strokeWidth={1.4} />} onClick={go(onAccount)}>
                   {currentUser ? `Sign out (${currentUser})` : "Account"}
-                </PanelLink>
-                <PanelLink icon={<Inbox className="w-5 h-5" strokeWidth={1.4} />} onClick={go(onInbox)}>
-                  Order updates
-                  {unreadEmails > 0 && <span className="badge badge-sale ml-2">{unreadEmails}</span>}
                 </PanelLink>
                 <PanelLink icon={<MessageCircle className="w-5 h-5" strokeWidth={1.4} />} href={whatsappUrl}>
                   WhatsApp us

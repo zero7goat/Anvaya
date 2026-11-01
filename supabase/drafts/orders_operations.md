@@ -41,11 +41,9 @@ update private.checkout_settings set max_units_per_line = 10;              -- pe
 update private.checkout_settings set max_lines_per_order = 20;             -- different pieces per order
 update private.checkout_settings set max_pending_orders_per_phone = 3,
                                      pending_window = interval '24 hours'; -- per phone number
-update private.checkout_settings set free_shipping_threshold = 1999,
-                                     standard_shipping_fee = 99;
 ```
 
-If you change the shipping figures, change `freeShippingThreshold` and `standardShippingFee` in `src/config.ts` too. The shop *shows* those values while the database *charges* these, and a test compares them.
+Shipping is free on every order, so `free_shipping_threshold` and `standard_shipping_fee` are both 0.
 
 **If the settings row is ever deleted, checkout stops.** Both checkout functions fail with *"Checkout is unavailable: the shop settings are missing."* rather than running without limits. To put the row back with the agreed values:
 
@@ -53,7 +51,7 @@ If you change the shipping figures, change `freeShippingThreshold` and `standard
 insert into private.checkout_settings
   (id, free_shipping_threshold, standard_shipping_fee, max_units_per_line, max_lines_per_order,
    max_pending_orders_per_phone, pending_window)
-values (true, 1999, 99, 10, 20, 3, interval '24 hours')
+values (true, 0, 0, 10, 20, 3, interval '24 hours')
 on conflict (id) do nothing;
 ```
 

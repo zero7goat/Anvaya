@@ -90,8 +90,12 @@ export default function LoginModal({ isOpen, onClose, footer }: LoginModalProps)
                 Customer accounts aren't available yet, and you don't need one to shop.
               </p>
               <p className="text-sm text-muted mt-3 leading-relaxed">
-                Add pieces to your bag and check out with Cash on Delivery. Keep the order reference shown after
-                ordering; the boutique contacts you by phone or WhatsApp to confirm.
+                Add pieces to your bag and send it to us on WhatsApp. We'll confirm availability, the final amount
+                and payment in the chat. You can also email{" "}
+                <a href={`mailto:${BOUTIQUE_CONFIG.supportEmail}`} className="link">
+                  {BOUTIQUE_CONFIG.supportEmail}
+                </a>
+                .
               </p>
 
               <button

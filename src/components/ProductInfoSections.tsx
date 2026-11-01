@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Banknote, Mail, Plus, Truck } from "lucide-react";
 import { Product } from "../types";
 import { BOUTIQUE_CONFIG } from "../config";
-import { formatINR, getCollectionKey, getSizeOptions } from "../utils/productDisplay";
+import { getCollectionKey, getSizeOptions } from "../utils/productDisplay";
 import { MOTION_TRANSITION } from "../utils/motion";
 
 /**
@@ -13,8 +13,7 @@ import { MOTION_TRANSITION } from "../utils/motion";
  */
 export default function ProductInfoSections({ product }: { product: Product }) {
   const collection = BOUTIQUE_CONFIG.collections[getCollectionKey(product)];
-  const { supportPhone, supportEmail, supportHours, freeShippingThreshold, standardShippingFee } =
-    BOUTIQUE_CONFIG;
+  const { supportPhone, supportEmail, supportHours } = BOUTIQUE_CONFIG;
   const codEnabled = BOUTIQUE_CONFIG.paymentMethods.some((m) => m.id === "cod" && m.enabled);
   const whatsappUrl = `https://wa.me/${BOUTIQUE_CONFIG.whatsappNumber}`;
   const phoneHref = `tel:${supportPhone.replace(/\s+/g, "")}`;
@@ -32,7 +31,7 @@ export default function ProductInfoSections({ product }: { product: Product }) {
       <ul className="hidden md:flex flex-wrap gap-x-8 gap-y-3 text-sm text-ink">
         <li className="flex items-center gap-2.5">
           <Truck className="w-5 h-5 text-maroon-600" strokeWidth={1.5} aria-hidden="true" />
-          Free shipping above {formatINR(freeShippingThreshold)}
+          Free shipping
         </li>
         {codEnabled && (
           <li className="flex items-center gap-2.5">
@@ -87,17 +86,15 @@ export default function ProductInfoSections({ product }: { product: Product }) {
         <InfoSection {...sectionProps("Delivery & Returns")}>
           <ul className="space-y-1.5 list-disc pl-4">
             <li>Delivering across India.</li>
-            <li>
-              Free shipping on orders of {formatINR(freeShippingThreshold)} or more; {formatINR(standardShippingFee)}{" "}
-              on smaller orders.
-            </li>
+            <li>Free shipping.</li>
             {codEnabled && <li>Cash on Delivery: pay by cash or UPI at your door.</li>}
+            <li>You can cancel an order only before it is dispatched.</li>
+            <li>No refunds.</li>
+            <li>Returns are accepted only for damage, with a video of the unboxing, and if the piece hasn't been worn.</li>
             <li>
-              For returns or exchanges, contact us on{" "}
-              <a href={whatsappUrl} target="_blank" rel="noreferrer" className="link">
-                WhatsApp
-              </a>{" "}
-              or {supportEmail ? "by email" : "by phone"} with your order details.
+              <a href="/shipping-and-returns" className="link">
+                Read the full policy
+              </a>
             </li>
           </ul>
         </InfoSection>

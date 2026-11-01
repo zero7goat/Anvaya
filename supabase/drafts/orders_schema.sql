@@ -22,9 +22,7 @@
 -- Adjusting limits and shipping later (no redeploy needed), for example:
 --   update private.checkout_settings set max_pending_orders_per_phone = 5;
 --   update private.checkout_settings set pending_window = interval '12 hours';
---   update private.checkout_settings set free_shipping_threshold = 2499, standard_shipping_fee = 149;
--- Keep src/config.ts (freeShippingThreshold, standardShippingFee) in step: the shop shows
--- those figures, the database charges these. A test compares them.
+-- Shipping is free on every order, so free_shipping_threshold and standard_shipping_fee are 0.
 
 begin;
 
@@ -51,7 +49,7 @@ revoke all on private.checkout_settings from public, anon, authenticated;
 insert into private.checkout_settings
   (id, free_shipping_threshold, standard_shipping_fee, max_units_per_line, max_lines_per_order,
    max_pending_orders_per_phone, pending_window)
-values (true, 1999, 99, 10, 20, 3, interval '24 hours')
+values (true, 0, 0, 10, 20, 3, interval '24 hours')
 on conflict (id) do nothing;
 
 -- The settings row, or a clear error. Checkout fails closed without it: with no row,

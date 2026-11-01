@@ -1,12 +1,13 @@
 import React, { ReactNode } from "react";
-import { MessageSquare, Mail, Banknote, MapPin } from "lucide-react";
+import { MessageSquare, Mail, MapPin } from "lucide-react";
 import { BOUTIQUE_CONFIG } from "../config";
 import { CollectionType } from "../types";
 import { productService } from "../services/productService";
-import { formatINR } from "../utils/productDisplay";
 import { COLLECTION_STYLES } from "../utils/productRules";
+import { POLICY_LINKS, type PolicyView } from "../utils/routes";
 
 interface FooterProps {
+  onNavigatePolicy?: (view: PolicyView) => void;
   onSelectCategory?: (category: string) => void;
   onNavigateCollection?: (collection: CollectionType) => void;
   onNavigateCollectionStyle?: (collection: CollectionType, style: string) => void;
@@ -21,7 +22,7 @@ export { COLLECTION_STYLES };
  * notes, then a centred copyright line. Every link goes to a real page, filter,
  * phone number, WhatsApp chat or email.
  */
-export default function Footer({ onSelectCategory, onNavigateCollection, onNavigateCollectionStyle }: FooterProps) {
+export default function Footer({ onSelectCategory, onNavigateCollection, onNavigateCollectionStyle, onNavigatePolicy }: FooterProps) {
   const { collections } = BOUTIQUE_CONFIG;
   const whatsappUrl = `https://wa.me/${BOUTIQUE_CONFIG.whatsappNumber}`;
   const phoneHref = `tel:${BOUTIQUE_CONFIG.supportPhone.replace(/\s+/g, "")}`;
@@ -110,16 +111,18 @@ export default function Footer({ onSelectCategory, onNavigateCollection, onNavig
             </li>
           </FooterColumn>
 
-          {/* The shop's actual checkout rules, as information rather than links */}
-          <FooterColumn title="Delivery & Payment" id="footer-col-policies">
-            <li className="text-white/80">
-              Free shipping from {formatINR(BOUTIQUE_CONFIG.freeShippingThreshold)}
-            </li>
-            <li className="text-white/80">
-              {formatINR(BOUTIQUE_CONFIG.standardShippingFee)} shipping below {formatINR(BOUTIQUE_CONFIG.freeShippingThreshold)}
-            </li>
-            <li className="text-white/80">Cash on Delivery</li>
+          {/* The shop's actual ordering rules, then its policy pages */}
+          <FooterColumn title="Delivery & Policies" id="footer-col-policies">
+            <li className="text-white/80">Free shipping</li>
+            <li className="text-white/80">Orders on WhatsApp</li>
             <li className="text-white/80">All India Delivery</li>
+            {POLICY_LINKS.map(({ view, label }) => (
+              <li key={view}>
+                <button onClick={() => onNavigatePolicy?.(view)} className={linkClass}>
+                  {label}
+                </button>
+              </li>
+            ))}
           </FooterColumn>
         </div>
 
@@ -153,13 +156,8 @@ export default function Footer({ onSelectCategory, onNavigateCollection, onNavig
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 md:justify-center text-sm">
-            <Banknote className="w-4 h-4 text-gold-300" aria-hidden="true" />
-            <span className="text-white/90">Pay on delivery</span>
-            {["Cash", "UPI"].map((method) => (
-              <span key={method} className="px-2.5 py-1 bg-canvas text-maroon-800 text-2xs font-bold tracking-wider uppercase">
-                {method}
-              </span>
-            ))}
+            <MessageSquare className="w-4 h-4 text-gold-300" aria-hidden="true" />
+            <span className="text-white/90">Order by WhatsApp enquiry</span>
           </div>
 
           <div className="flex items-center gap-2 md:justify-end text-sm text-white/90">

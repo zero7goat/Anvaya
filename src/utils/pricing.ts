@@ -6,20 +6,12 @@ import type { CartItem, Offer } from "../types";
  * Kept free of runtime imports so it can be unit tested directly with Node.
  */
 
-export interface ShippingRules {
-  freeShippingThreshold: number;
-  standardShippingFee: number;
-}
-
 export interface CartTotals {
   subtotal: number;
   // Coupon in force for this cart (null when none, or the cart no longer qualifies)
   appliedOffer: Offer | null;
   discount: number;
-  shipping: number;
   total: number;
-  // Rupees still needed for free shipping (0 once it applies)
-  amountToFreeShipping: number;
 }
 
 export const getUnitPrice = (product: CartItem["product"]) => product.salePrice || product.price;
@@ -43,22 +35,14 @@ export function getOfferDiscount(offer: Offer, subtotal: number): number {
   return Math.min(Math.max(0, raw), subtotal);
 }
 
-// Free shipping is judged on the subtotal before any coupon, as the shop advertises it
-export function getShipping(subtotal: number, rules: ShippingRules): number {
-  if (subtotal <= 0 || subtotal >= rules.freeShippingThreshold) return 0;
-  return rules.standardShippingFee;
-}
-
-export function calculateCartTotals(items: CartItem[], offer: Offer | null, rules: ShippingRules): CartTotals {
+// Shipping is free on every order, so the total is the pieces less any coupon
+export function calculateCartTotals(items: CartItem[], offer: Offer | null): CartTotals {
   const subtotal = getSubtotal(items);
   const discount = offer ? getOfferDiscount(offer, subtotal) : 0;
-  const shipping = getShipping(subtotal, rules);
   return {
     subtotal,
     appliedOffer: discount > 0 ? offer : null,
     discount,
-    shipping,
-    total: Math.max(0, subtotal - discount + shipping),
-    amountToFreeShipping: subtotal > 0 && shipping > 0 ? rules.freeShippingThreshold - subtotal : 0,
+    total: Math.max(0, subtotal - discount),
   };
 }

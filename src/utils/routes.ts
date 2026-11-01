@@ -7,11 +7,19 @@
  *   /collection/alankritha, /collection/ayanaa
  *   /product/:id                              (an unknown id shows "Product not found")
  *   /admin                                    (and anything under /admin/)
+ *   /shipping-and-returns, /terms-and-conditions, /privacy-policy
  *
  * Older links used hash routes on the homepage (#/product/:id, #/collection/..., #/admin);
  * they still work. A trailing slash is ignored.
  */
-export type ViewState = "store" | "collection_alankritha" | "collection_ayanaa" | "product" | "admin" | "not_found";
+export type PolicyView = "policy_shipping" | "policy_terms" | "policy_privacy";
+export type ViewState = "store" | "collection_alankritha" | "collection_ayanaa" | "product" | "admin" | "not_found" | PolicyView;
+
+export const POLICY_LINKS: { view: PolicyView; path: string; label: string }[] = [
+  { view: "policy_shipping", path: "/shipping-and-returns", label: "Shipping & Returns" },
+  { view: "policy_terms", path: "/terms-and-conditions", label: "Terms & Conditions" },
+  { view: "policy_privacy", path: "/privacy-policy", label: "Privacy Policy" },
+];
 
 export interface Route {
   view: ViewState;
@@ -37,7 +45,9 @@ export function resolveRoute(pathname: string, hash: string): Route {
   if (path === "/admin" || path.startsWith("/admin/")) return page("admin");
   if (path === "/collection/alankritha") return page("collection_alankritha");
   if (path === "/collection/ayanaa") return page("collection_ayanaa");
-  if (path !== "/" && path !== "/index.html") return NOT_FOUND;
+  const policy = POLICY_LINKS.find((link) => link.path === path);
+  if (policy) return page(policy.view);
+  if (path !== "/"&& path !== "/index.html") return NOT_FOUND;
 
   // Homepage, or an older hash link to another page
   const hashProduct = hash.match(/^#\/product\/([^/]+)\/?$/);

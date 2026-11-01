@@ -1,10 +1,8 @@
 import { Fragment, ReactNode, TouchEvent, useEffect, useRef, useState } from "react";
 import { CollectionType } from "../../types";
 import { BOUTIQUE_CONFIG } from "../../config";
-import { offerService } from "../../services/offerService";
 import { SITE_IMAGES, HeroSlide } from "../../data/imageRegistry";
 import { IMAGE_WIDTHS, imageAtWidth, responsiveImage } from "../../utils/imageSources";
-import { formatINR } from "../../utils/productDisplay";
 import { getStyleCards } from "./ShopByStyle";
 
 const SLIDES = SITE_IMAGES.mobileHeroSlides;
@@ -232,20 +230,12 @@ export default function MobileHero({
   );
 }
 
-/** Scrolling strip of current offers: real coupon codes and shop services only. */
+/** Scrolling strip of the shop's real services. */
 function OffersStrip() {
-  const offers = offerService.getOffers().filter((o) => o.enabled);
   const cod = BOUTIQUE_CONFIG.paymentMethods.some((m) => m.id === "cod" && m.enabled);
   const items = [
-    ...offers.map((o) => (
-      <>
-        Save more! Use <strong className="text-maroon-600 font-bold">{o.code}</strong> for{" "}
-        {o.type === "percent" ? `${o.discountValue}% off` : `${formatINR(o.discountValue)} off`} on orders above{" "}
-        {formatINR(o.minSpend)}
-      </>
-    )),
-    <>Free shipping above {formatINR(BOUTIQUE_CONFIG.freeShippingThreshold)}</>,
-    ...(cod ? [<>Cash on Delivery available</>] : []),
+    <>Free shipping</>,
+    ...(cod ? [<>Cash on Delivery available</>] : [<>Order on WhatsApp</>]),
     <>Delivering across India</>,
   ];
   // Two identical copies scroll as one loop
