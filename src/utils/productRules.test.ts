@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { checkProductForm, checkStockQuantity, isAllowedImage, newProductId, type ProductFormValues } from "./productRules.ts";
+import { checkProductCode, checkProductForm, checkStockQuantity, isAllowedImage, newProductId, type ProductFormValues } from "./productRules.ts";
 
 const kurtaForm = (changes: Partial<ProductFormValues> = {}): ProductFormValues => ({
   name: " Placeholder Kurta ",
@@ -99,4 +99,12 @@ test("photos: the main one first, then the gallery, without repeats, up to the l
   assert.match(errorOf(kurtaForm({ additionalImages: ["javascript:alert(1)"] })), /https:\/\//);
   const many = Array.from({ length: 8 }, (_, i) => `https://e.com/${i}.webp`);
   assert.match(errorOf(kurtaForm({ additionalImages: many })), /up to 8 photos/);
+});
+
+test("product codes: letters, numbers and hyphens, saved in lower case", () => {
+  assert.equal(checkProductCode(" ALK3K05 ").value, "alk3k05");
+  assert.equal(checkProductCode("alk-017").value, "alk-017");
+  for (const bad of ["", "ab", "-abc", "ALK 3K05", "alk/3k05", "a".repeat(41), "alk_3k05"]) {
+    assert.equal(checkProductCode(bad).ok, false, bad);
+  }
 });

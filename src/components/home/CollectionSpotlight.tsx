@@ -6,9 +6,9 @@ import { SITE_IMAGES, getProductImage } from "../../data/imageRegistry";
 import ProductCard from "../ProductCard";
 import ProductImage from "../ProductImage";
 
-// When no campaign image is supplied, use this catalogue product's own photo
+// When no campaign image is supplied, use this catalogue product's own photo (or, if it
+// isn't in the shop, the newest piece that has a photo)
 const FALLBACK_PRODUCT: Partial<Record<CollectionType, string>> = {
-  alankritha: "alk-003",
   ayanaa: "alk-017",
 };
 
@@ -34,7 +34,9 @@ export default function CollectionSpotlight({
   const pieces = productService.getProducts({ collection: collectionKey, sortBy: "newest" });
   const styles = [...new Set(pieces.map((p) => p.subcategory).filter(Boolean))];
 
-  const fallback = FALLBACK_PRODUCT[collectionKey] ? productService.getProductById(FALLBACK_PRODUCT[collectionKey]!) : null;
+  const chosen = FALLBACK_PRODUCT[collectionKey] ? productService.getProductById(FALLBACK_PRODUCT[collectionKey]!) : null;
+  const fallback =
+    (chosen && chosen.status === "enabled" ? chosen : null) ?? pieces.find((p) => getProductImage(p) !== "") ?? null;
   const image = SITE_IMAGES.editorial[collectionKey] || (fallback ? getProductImage(fallback) : "");
   const imageProduct = !SITE_IMAGES.editorial[collectionKey] && fallback ? fallback : null;
   const showcase = pieces.filter((p) => p.id !== imageProduct?.id).slice(0, 2);
@@ -48,7 +50,7 @@ export default function CollectionSpotlight({
       <div className="container-page grid lg:grid-cols-12 gap-8 lg:gap-14 items-center">
         {/* Large image */}
         <div className={`lg:col-span-6 ${reverse ? "lg:order-last" : ""}`}>
-          <div className="relative aspect-[4/5] overflow-hidden bg-surface-muted">
+          <div className="relative aspect-[3/4] overflow-hidden bg-surface-muted">
             {image ? (
               <>
                 <ProductImage

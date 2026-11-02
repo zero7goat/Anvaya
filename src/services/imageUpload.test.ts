@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  MAX_SOURCE_BYTES, checkImageFile, describeDeleteProblem, describeUploadError, fitWithin, photosToDelete, pickCompressed, productImagePath, storedImagePath,
+  MAX_SOURCE_BYTES, PHOTO_ASPECT, checkImageFile, croppedSize, describeDeleteProblem, describeUploadError, fitWithin, photosToDelete, pickCompressed, productImagePath, storedImagePath,
 } from "./imageUpload.ts";
 
 test("only JPEG, PNG and WebP photos of a sensible size are accepted", () => {
@@ -76,4 +76,12 @@ test("a delete the access rules refuse is reported, not ignored", () => {
   assert.match(describeDeleteProblem(1, 0)!, /1 old photo couldn't/);
   assert.match(describeDeleteProblem(1, 0, "jwt expired")!, /session has expired/);
   assert.match(describeDeleteProblem(1, 0, "boom")!, /couldn't be deleted/);
+});
+
+test("a chosen part is saved at exactly 3:4, up to 1200 x 1600 and never enlarged", () => {
+  assert.deepEqual(croppedSize({ width: 3000 }), { width: 1200, height: 1600 });
+  assert.deepEqual(croppedSize({ width: 900 }), { width: 900, height: 1200 });
+  assert.deepEqual(croppedSize({ width: 600.4 }), { width: 600, height: 800 });
+  assert.deepEqual(croppedSize({ width: 1 }), { width: 3, height: 4 });
+  assert.equal(PHOTO_ASPECT, 0.75);
 });

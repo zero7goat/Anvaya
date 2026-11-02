@@ -4,6 +4,7 @@ import type { Product } from "../types";
 import {
   CatalogueAdmin,
   describeWriteError,
+  parseCodeChange,
   parseStockReply,
   type CatalogueGateway,
   type DbError,
@@ -394,4 +395,15 @@ test("database error messages", () => {
   assert.match(describeWriteError({ message: "AbortError signal timed out" }), /took too long/);
   assert.match(describeWriteError({ message: "permission denied for table products", code: "42501" }), /permission/);
   assert.match(describeWriteError({ message: "Supabase is not configured" }), /isn't set up/);
+});
+
+test("code change replies become clear dashboard messages", () => {
+  assert.deepEqual(parseCodeChange({ ok: true, id: "alk3k05" }, null), { ok: true, id: "alk3k05" });
+  assert.match(parseCodeChange({ ok: false, reason: "taken" }, null).error!, /Another product already has this code/);
+  assert.match(parseCodeChange({ ok: false, reason: "invalid" }, null).error!, /3 to 40/);
+  assert.match(parseCodeChange({ ok: false, reason: "not_found" }, null).error!, /no longer exists/);
+  assert.match(parseCodeChange({ ok: false, reason: "same" }, null).error!, /already this product's code/);
+  assert.match(parseCodeChange(null, { code: "PGRST202", message: "not found" }).error!, /product_code_change\.sql/);
+  assert.match(parseCodeChange(null, { code: "42501", message: "Only admins can change product codes." }).error!, /permission/);
+  assert.match(parseCodeChange("weird", null).error!, /couldn't be changed/);
 });

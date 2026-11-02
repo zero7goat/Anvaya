@@ -156,16 +156,19 @@ function QuickViewDialog({
 
         {/* Scrolls inside the panel, so the close button above always stays in view */}
         <div className="flex-1 min-w-0 overflow-y-auto overscroll-contain grid grid-cols-1 sm:grid-cols-2 sm:items-start">
-          {/* The whole garment stays visible: the photo is contained, never cropped. Phones
-              give it about half the screen height; wider screens pin it beside the details. */}
-          <div className="h-[min(52svh,30rem)] sm:sticky sm:top-0 sm:h-[min(36rem,calc(100svh-3rem))] w-full bg-surface-muted">
-            <ProductImage
-              src={getProductImage(product)}
-              alt={product.name}
-              className="w-full h-full object-contain"
-              loading="eager"
-              sizes="(min-width: 640px) 320px, 100vw"
-            />
+          {/* Product photos are 3:4, so a 3:4 frame shows the whole garment with no cropping
+              or empty bands. Phones give it about half the screen height; wider screens pin it
+              beside the details. */}
+          <div className="sm:sticky sm:top-0 w-full">
+            <div className="mx-auto h-[min(52svh,30rem)] aspect-[3/4] sm:h-auto sm:w-full bg-surface-muted overflow-hidden">
+              <ProductImage
+                src={getProductImage(product)}
+                alt={product.name}
+                className="w-full h-full object-cover"
+                loading="eager"
+                sizes="(min-width: 640px) 320px, 100vw"
+              />
+            </div>
           </div>
 
           <div className="p-4 min-[400px]:p-5 sm:p-7 flex flex-col gap-4 sm:min-h-[min(36rem,calc(100svh-3rem))]">

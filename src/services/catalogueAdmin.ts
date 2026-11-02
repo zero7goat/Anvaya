@@ -295,3 +295,43 @@ const supabaseGateway = async (): Promise<CatalogueGateway> => {
 };
 
 export const catalogueAdmin = new CatalogueAdmin(supabaseGateway);
+
+export type CodeChangeResult = { ok: true; id: string; error?: undefined } | { ok: false; error: string; id?: undefined };
+
+/** Reads admin_change_product_id's reply (or its error) as a dashboard result */
+export const parseCodeChange = (data: unknown, error: DbError | null): CodeChangeResult => {
+  if (error) {
+    if (error.code === "PGRST202" || error.code === "42883") {
+      return { ok: false, error: "Product codes can't be changed yet: the database hasn't been updated (product_code_change.sql)." };
+    }
+    if (error.code === "55P03") return { ok: false, error: "This product is being changed by an order right now. Wait a moment and try again." };
+    return { ok: false, error: describeWriteError(error) };
+  }
+  const reply = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+  if (reply.ok === true && typeof reply.id === "string") return { ok: true, id: reply.id };
+  const reason = typeof reply.reason === "string" ? reply.reason : "";
+  const messages: Record<string, string> = {
+    invalid: "Use 3 to 40 letters, numbers or hyphens for the product code, e.g. ALK3K11.",
+    same: "That is already this product's code.",
+    taken: "Another product already has this code. Choose a different one.",
+    not_found: "This product no longer exists. Refresh the list.",
+  };
+  return { ok: false, error: messages[reason] ?? "The code couldn't be changed. Please try again." };
+};
+
+/**
+ * Changes a product's code (its id). Stock, reviews and past order lines move with it, in
+ * one database transaction (supabase/drafts/product_code_change.sql).
+ */
+export async function changeProductCode(oldId: string, newId: string): Promise<CodeChangeResult> {
+  if (!isSupabaseConfigured()) return { ok: false, error: "Product codes can't be changed: the database isn't set up for this site." };
+  try {
+    const { supabase } = await import("../utils/supabase");
+    const { data, error } = await supabase
+      .rpc("admin_change_product_id", { p_old_id: oldId, p_new_id: newId })
+      .abortSignal(AbortSignal.timeout(WRITE_TIMEOUT_MS));
+    return parseCodeChange(data, error as DbError | null);
+  } catch (error) {
+    return parseCodeChange(null, { message: error instanceof Error ? `${error.name} ${error.message}` : "network error" });
+  }
+}

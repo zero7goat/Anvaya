@@ -746,9 +746,16 @@
   .ds-table tbody tr:last-child { border-bottom: 0; }
   .ds-table tbody tr:hover { background-color: var(--color-canvas); }
 
-  /* Admin tables on phones: each row becomes a card, every cell a labelled line.
-     Tablets and wider keep the regular table. */
-  @media (max-width: 639px) {
+  /* Admin tables on phones and tablets: each row becomes a card, every cell a labelled
+     line (one column of cards on phones, two on tablets). Laptops and wider keep the
+     regular table, where every column has room. */
+  @media (min-width: 640px) and (max-width: 1023px) {
+    .ds-table-stack tbody { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ds-table-stack tbody > tr { border-bottom: 1px solid var(--color-line); }
+    .ds-table-stack tbody > tr:nth-child(odd) { border-right: 1px solid var(--color-line); }
+    .ds-table-stack tbody > tr:last-child { border-bottom: 1px solid var(--color-line); }
+  }
+  @media (max-width: 1023px) {
     .ds-table-stack { min-width: 0 !important; width: 100%; }
     .ds-table-stack thead { display: none; }
     .ds-table-stack tbody, .ds-table-stack tr, .ds-table-stack td { display: block; width: 100%; }
@@ -846,24 +853,28 @@
   }
 }
 
-/* Strictly ensure images (including SVG <image>) NEVER zoom or scale */
-img,
-img:hover,
-img:focus,
-img:active,
-.group:hover img,
-[class*="group"]:hover img,
-div:hover > img,
-a:hover > img,
-button:hover > img,
-picture:hover > img,
-.anvaya-card-hover img,
-.anvaya-card-hover:hover img {
+/* Strictly ensure images (including SVG <image>) NEVER zoom or scale. The one exception is
+   the photo in the admin crop window, which is moved and zoomed (with transform) on purpose. */
+img:not(.reactEasyCrop_Image),
+img:not(.reactEasyCrop_Image):hover,
+img:not(.reactEasyCrop_Image):focus,
+img:not(.reactEasyCrop_Image):active,
+.group:hover img:not(.reactEasyCrop_Image),
+[class*="group"]:hover img:not(.reactEasyCrop_Image),
+div:hover > img:not(.reactEasyCrop_Image),
+a:hover > img:not(.reactEasyCrop_Image),
+button:hover > img:not(.reactEasyCrop_Image),
+picture:hover > img:not(.reactEasyCrop_Image),
+.anvaya-card-hover img:not(.reactEasyCrop_Image),
+.anvaya-card-hover:hover img:not(.reactEasyCrop_Image) {
   transform: none !important;
   scale: 1 !important;
   zoom: 1 !important;
   max-width: 100%;
 }
+/* The crop window's own rules size its photo; keep the site's max-width off it except in
+   "contain" mode, where the library relies on it */
+img.reactEasyCrop_Image.reactEasyCrop_Contain { max-width: 100%; }
 
 svg image,
 svg image:hover,

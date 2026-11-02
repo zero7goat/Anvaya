@@ -3,18 +3,16 @@ import {
   Package, ShoppingBag, AlertTriangle, CheckCircle2, Clock, 
   Search, Plus, Edit2, Trash2, Eye, EyeOff, LogOut, ArrowLeft, 
   Filter, Check, X, RefreshCw, Smartphone, ExternalLink,
-  ChevronRight, Layers, DollarSign, Store, Menu, Bell, BellOff, Volume2, VolumeX
+  Layers, DollarSign, Store, Bell, BellOff, Volume2, VolumeX, LayoutDashboard, Ticket
 } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
-import { OVERLAY_MOTION } from "../utils/motion";
-import { useOverlay } from "../hooks/useOverlay";
 import { Product, Order, CollectionType } from "../types";
 import { productService } from "../services/productService";
 import { MAX_ORDERS, orderApi, nextPaymentStatus, nextStatuses, type OrderStatus, type PaymentStatus } from "../services/orderApi";
 import { authService, AdminAuthState } from "../services/authService";
-import { catalogueAdmin, SaveResult } from "../services/catalogueAdmin";
+import { catalogueAdmin, changeProductCode, SaveResult } from "../services/catalogueAdmin";
 import {
-  COLLECTION_STYLES, MAX_DESCRIPTION_LENGTH, MAX_NAME_LENGTH, MAX_PHOTOS, MAX_STOCK, checkProductForm, isAllowedImage, newProductId,
+  COLLECTION_STYLES, MAX_DESCRIPTION_LENGTH, MAX_NAME_LENGTH, MAX_PHOTOS, MAX_STOCK, checkProductCode, checkProductForm, isAllowedImage,
+  newProductId,
 } from "../utils/productRules";
 import { BOUTIQUE_CONFIG } from "../config";
 import ProductImage from "./ProductImage";
@@ -27,8 +25,9 @@ import { filterInventory } from "../utils/inventorySearch";
 import { useNewOrderAlerts, type NotificationState } from "../hooks/useNewOrderAlerts";
 import { ORDER_POLL_MS } from "../services/orderAlerts";
 import {
-  ACCEPTED_IMAGE_TYPES, checkImageFile, compressImage, deleteProductImages, photosToDelete, uploadProductImage,
+  ACCEPTED_IMAGE_TYPES, checkImageFile, compressImage, deleteProductImages, photosToDelete, uploadProductImage, type CropArea,
 } from "../services/imageUpload";
+import PhotoCropper from "./PhotoCropper";
 
 // Every photo of a product, main photo first
 const productPhotos = (p: { image: string; additionalImages?: string[] }): string[] =>
@@ -60,8 +59,6 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
 
   // Dashboard active view
   const [activeTab, setActiveTab] = useState<AdminSection>("overview");
-  // Section menu on screens narrower than the header tabs
-  const [sectionMenuOpen, setSectionMenuOpen] = useState(false);
 
   // In-memory data states
   const [products, setProducts] = useState<Product[]>([]);
@@ -102,6 +99,12 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
   // Photos uploaded while the form is open: deleted again if the form is closed without
   // saving them, so no unused files are left in storage
   const formUploadsRef = useRef<string[]>([]);
+  // Product code: chosen when adding (optional), or changed on its own when editing
+  const [codeInput, setCodeInput] = useState("");
+  const [codeBusy, setCodeBusy] = useState(false);
+  const [codeMessage, setCodeMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  // The code a new product was first saved under, so retrying that save isn't refused as "taken"
+  const createdIdRef = useRef("");
   const [formError, setFormError] = useState("");
   // Id for the product being added, made once per form so a retried save can't add it twice
   const [newFormProductId, setNewFormProductId] = useState("");
@@ -352,6 +355,9 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
       sizeStock: { "S": 4, "M": 6, "L": 4, "XL": 2, "XXL": 0 }
     });
     formUploadsRef.current = [];
+    setCodeInput("");
+    setCodeMessage(null);
+    createdIdRef.current = "";
     setNewFormProductId(newProductId());
     setFormError("");
     setIsProductModalOpen(true);
@@ -376,6 +382,8 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
       sizeStock: Object.fromEntries(ALL_SIZES.map((sz) => [sz, product.sizeStock?.[sz] ?? 0]))
     });
     formUploadsRef.current = [];
+    setCodeInput(product.id.toUpperCase());
+    setCodeMessage(null);
     setFormError("");
     setIsProductModalOpen(true);
   };
@@ -383,12 +391,27 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
   // Save product (Create or Update) to Supabase. On failure the form stays open with what was typed.
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (savingProductRef.current || imageUploading) return;
+    if (savingProductRef.current || imageUploading || codeBusy) return;
     const checked = checkProductForm(formData);
     if (!checked.ok) {
       setFormError(checked.error);
       return;
     }
+    // A new product gets the code typed in, or else the id made when the form opened
+    let newId = newFormProductId;
+    if (!editingProduct && codeInput.trim()) {
+      const code = checkProductCode(codeInput);
+      if (!code.ok) {
+        setFormError(code.error);
+        return;
+      }
+      if (code.value !== createdIdRef.current && productService.getProductById(code.value)) {
+        setFormError(`Another product already has the code ${code.value.toUpperCase()}. Choose a different one.`);
+        return;
+      }
+      newId = code.value;
+    }
+    if (!editingProduct) createdIdRef.current = newId;
 
     savingProductRef.current = true;
     setSavingProduct(true);
@@ -397,10 +420,10 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
       const draft = checked.value;
       const result = editingProduct
         ? await catalogueAdmin.updateProduct(editingProduct, draft)
-        : await catalogueAdmin.createProduct(newFormProductId, draft);
+        : await catalogueAdmin.createProduct(newId, draft);
       if (!result.ok) {
         setFormError(result.error);
-        if (result.stockChanged) await showLiveStockInForm(editingProduct?.id ?? newFormProductId, editingProduct);
+        if (result.stockChanged) await showLiveStockInForm(editingProduct?.id ?? newId, editingProduct);
         return;
       }
       // Saved: delete the photos this product no longer uses from storage
@@ -430,8 +453,39 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
     setFormData((prev) => ({ ...prev, sizeStock: Object.fromEntries(ALL_SIZES.map((sz) => [sz, fresh.sizeStock?.[sz] ?? 0])) }));
   };
 
+  // Change the code of the product being edited. Saved straight away (stock, reviews and past
+  // orders move with it); the rest of the form is still saved with "Save Product".
+  const handleChangeCode = async () => {
+    if (!editingProduct || codeBusy || savingProductRef.current || imageUploading) return;
+    const code = checkProductCode(codeInput);
+    if (!code.ok) {
+      setCodeMessage({ kind: "error", text: code.error });
+      return;
+    }
+    if (code.value === editingProduct.id) {
+      setCodeMessage({ kind: "error", text: "That is already this product's code." });
+      return;
+    }
+    setCodeBusy(true);
+    setCodeMessage(null);
+    const result = await changeProductCode(editingProduct.id, code.value);
+    if (!result.ok) {
+      setCodeBusy(false);
+      setCodeMessage({ kind: "error", text: result.error });
+      return;
+    }
+    await productService.reloadCatalogue();
+    refreshData();
+    const fresh = productService.getProductById(result.id);
+    // Kept as first loaded: a category change still counts as one when the form is saved
+    if (fresh) setEditingProduct({ ...fresh, category: editingProduct.category });
+    setCodeInput(result.id.toUpperCase());
+    setCodeBusy(false);
+    setCodeMessage({ kind: "success", text: `Product code changed to ${result.id.toUpperCase()}.` });
+  };
+
   const closeProductModal = () => {
-    if (savingProductRef.current || imageUploading) return;
+    if (savingProductRef.current || imageUploading || codeBusy) return;
     setIsProductModalOpen(false);
     // Closed without saving: photos uploaded meanwhile aren't used by anything, so delete them
     const unused = photosToDelete([], formUploadsRef.current, editingProduct ? productPhotos(editingProduct) : []);
@@ -672,12 +726,9 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
     { id: "orders", label: "Orders", count: orders.length, newCount: orderAlerts.unseenCount },
     { id: "coupons", label: "Coupons" },
   ];
-  const activeSection = sections.find((s) => s.id === activeTab) ?? sections[0];
-
-  // Section chosen from the menu: show it from the top
+  // Section chosen from the bottom bar: show it from the top
   const openSection = (id: AdminSection) => {
     setActiveTab(id);
-    setSectionMenuOpen(false);
     window.scrollTo({ top: 0 });
   };
 
@@ -701,9 +752,6 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
               <div className="max-[359px]:sr-only">
                 <span className="font-serif text-lg tracking-[0.18em] text-ink uppercase">
                   ANVAYA
-                </span>
-                <span className="eyebrow ml-2 hidden sm:inline">
-                  Admin Dashboard
                 </span>
               </div>
             </div>
@@ -761,29 +809,12 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
             {/* Right: section menu (narrower screens), Return to Store & Logout */}
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
               <button
-                type="button"
-                onClick={() => setSectionMenuOpen(true)}
-                aria-expanded={sectionMenuOpen}
-                aria-controls="admin-section-menu"
-                aria-haspopup="dialog"
-                className="lg:hidden btn btn-secondary btn-sm"
-                id="admin-section-menu-toggle"
-              >
-                <Menu className="w-4 h-4" aria-hidden="true" />
-                <span className="sr-only">Dashboard menu, current section:</span>
-                <span>{activeSection.label}</span>
-                {orderAlerts.unseenCount > 0 && (
-                  <span className="badge badge-sale tabular-nums">{orderAlerts.unseenCount} new</span>
-                )}
-              </button>
-
-              <button
                 onClick={onReturnToStore}
-                className="hidden sm:inline-flex btn btn-secondary btn-sm"
+                className="btn btn-secondary btn-sm"
                 title="Open storefront"
               >
-                <Store className="w-3.5 h-3.5" />
-                <span>View Store</span>
+                <Store className="w-3.5 h-3.5" aria-hidden="true" />
+                <span className="max-sm:sr-only">View Store</span>
               </button>
 
               <span className="hidden xl:inline text-xs text-muted max-w-[14rem] truncate" title={authState.email}>
@@ -805,26 +836,11 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
         </div>
       </header>
 
-      <AdminSectionMenu
-        isOpen={sectionMenuOpen}
-        onClose={() => setSectionMenuOpen(false)}
-        sections={sections}
-        activeSection={activeTab}
-        onSelect={openSection}
-        email={authState.email}
-        onViewStore={() => {
-          setSectionMenuOpen(false);
-          onReturnToStore();
-        }}
-        onSignOut={() => {
-          setSectionMenuOpen(false);
-          handleLogout();
-        }}
-        signingOut={signingOut}
-      />
+      {/* Phones and tablets: sections in a bar along the bottom, within thumb reach */}
+      <AdminBottomNav sections={sections} activeSection={activeTab} onSelect={openSection} />
 
-      {/* Main Content Area */}
-      <main className="flex-1 container-page py-8">
+      {/* Main Content Area (bottom padding keeps the last row clear of the bottom bar) */}
+      <main className="flex-1 container-page py-5 sm:py-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-8">
         <OrderAlertBar
           unseenCount={orderAlerts.unseenCount}
           onViewOrders={() => {
@@ -1070,12 +1086,13 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
               </div>
 
               {/* Filters */}
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="grid grid-cols-2 md:flex md:flex-wrap items-center gap-2">
                 {/* Collection Filter */}
                 <select
                   value={prodCollectionFilter}
                   onChange={(e) => setProdCollectionFilter(e.target.value as any)}
-                  className="field field-sm w-auto"
+                  aria-label="Collection"
+                  className="field field-sm w-full md:w-auto"
                 >
                   <option value="All">All Collections</option>
                   <option value="alankritha">Alankritha (Kurtas)</option>
@@ -1086,7 +1103,8 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                 <select
                   value={prodStatusFilter}
                   onChange={(e) => setProdStatusFilter(e.target.value as any)}
-                  className="field field-sm w-auto"
+                  aria-label="Status"
+                  className="field field-sm w-full md:w-auto"
                 >
                   <option value="All">All Statuses</option>
                   <option value="enabled">Published Only</option>
@@ -1120,13 +1138,13 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                           {/* Image & Title */}
                           <td data-label="" className="py-3 px-4">
                             <div className="flex items-center space-x-3">
-                              <ProductImage src={getProductImage(p)} alt={p.name} className="w-12 h-14 object-cover shrink-0" compact />
+                              <ProductImage src={getProductImage(p)} alt={p.name} className="w-12 h-16 object-cover shrink-0" compact />
                               <div className="max-w-xs">
                                 <div className="font-semibold text-neutral-900 line-clamp-1">
                                   {p.name}
                                 </div>
                                 <div className="text-xs text-neutral-500 tabular-nums">
-                                  {p.id}
+                                  {p.id.toUpperCase()}
                                 </div>
                               </div>
                             </div>
@@ -1187,17 +1205,20 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                             <div className="flex items-center justify-end space-x-2">
                               <button
                                 onClick={() => handleOpenEditModal(p)}
-                                className="btn-icon btn-icon-sm"
+                                className="btn btn-secondary btn-sm"
+                                aria-label={`Edit ${p.name}`}
                                 title="Edit product"
                               >
-                                <Edit2 className="w-3.5 h-3.5" />
+                                <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
+                                <span>Edit</span>
                               </button>
                               <button
                                 onClick={() => setProductToDelete(p)}
-                                className="btn-icon btn-icon-sm !text-danger hover:!bg-danger-soft"
+                                className="btn-icon !text-danger hover:!bg-danger-soft"
+                                aria-label={`Delete ${p.name}`}
                                 title="Delete product"
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Trash2 className="w-4 h-4" aria-hidden="true" />
                               </button>
                             </div>
                           </td>
@@ -1275,7 +1296,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                               {p.name}
                             </div>
                             <div className="text-xs text-neutral-400 tabular-nums">
-                              {p.id}
+                              {p.id.toUpperCase()}
                             </div>
                           </td>
                           <td data-label="Collection" className="py-3 px-4">
@@ -1462,22 +1483,23 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
       {/* MODAL: ADD / EDIT PRODUCT */}
       {/* ========================================================================= */}
       {isProductModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/50 backdrop-blur-xs">
-          <div className="dialog-panel bg-surface max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
-            
+        // Full screen on phones; a centred panel from 640px
+        <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center sm:p-4 bg-ink/50 backdrop-blur-xs">
+          <div className="dialog-panel bg-surface max-w-2xl w-full h-full sm:h-auto sm:max-h-[90vh] flex flex-col overflow-hidden rounded-none sm:rounded-xs">
+
             {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-line flex items-center justify-between">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-line flex items-center justify-between gap-3">
               <div>
                 <h3 className="heading-card text-lg sm:text-lg">
                   {editingProduct ? "Edit Product" : "Add New Handcrafted Outfit"}
                 </h3>
-                <p className="text-xs text-neutral-500">
+                <p className="text-xs text-neutral-500 hidden sm:block">
                   Fill in product details and stock for Alankritha or Ayanaa collection.
                 </p>
               </div>
               <button
                 onClick={closeProductModal}
-                disabled={savingProduct || imageUploading}
+                disabled={savingProduct || imageUploading || codeBusy}
                 className="btn-icon btn-icon-sm" aria-label="Close"
               >
                 <X className="w-5 h-5" />
@@ -1485,7 +1507,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleSaveProduct} className="p-6 overflow-y-auto space-y-4" aria-busy={savingProduct}>
+            <form onSubmit={handleSaveProduct} className="flex-1 px-4 sm:px-6 pt-4 sm:pt-6 overflow-y-auto overscroll-contain space-y-4" aria-busy={savingProduct}>
               {formError && (
                 <div className="status-note status-note-danger" role="alert">
                   {formError}
@@ -1493,6 +1515,64 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
               )}
 
               <fieldset disabled={savingProduct} className="space-y-4 min-w-0">
+
+              {/* Product code (its id): optional when adding, changed on its own when editing */}
+              <div>
+                <label htmlFor="admin-product-code" className="field-label">
+                  Product Code{editingProduct ? "" : " (optional)"}
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="admin-product-code"
+                    type="text"
+                    value={codeInput}
+                    onChange={(e) => {
+                      setCodeInput(e.target.value.toUpperCase());
+                      setCodeMessage(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && editingProduct) {
+                        e.preventDefault();
+                        void handleChangeCode();
+                      }
+                    }}
+                    placeholder="e.g. ALK3K11"
+                    maxLength={40}
+                    autoCapitalize="characters"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="field uppercase flex-1 min-w-0"
+                    aria-describedby="admin-product-code-help"
+                    disabled={codeBusy}
+                  />
+                  {editingProduct && (
+                    <button
+                      type="button"
+                      onClick={() => void handleChangeCode()}
+                      disabled={codeBusy || imageUploading || codeInput.trim().toLowerCase() === editingProduct.id}
+                      aria-busy={codeBusy}
+                      className="btn btn-secondary shrink-0"
+                    >
+                      {codeBusy ? "Changing…" : "Change code"}
+                    </button>
+                  )}
+                </div>
+                {codeMessage ? (
+                  <p
+                    id="admin-product-code-help"
+                    className={codeMessage.kind === "error" ? "field-error" : "field-help !text-success"}
+                    role={codeMessage.kind === "error" ? "alert" : "status"}
+                  >
+                    {codeMessage.text}
+                  </p>
+                ) : (
+                  <p id="admin-product-code-help" className="field-help">
+                    {editingProduct
+                      ? "Shown on the product page. Changing it keeps the product's stock, reviews and past orders; old links to the product stop working."
+                      : "Shown on the product page. Leave empty to have one made for you."}
+                  </p>
+                )}
+              </div>
 
               {/* Title */}
               <div>
@@ -1578,7 +1658,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                     step="1"
                     inputMode="numeric"
                     required
-                    placeholder="3999"
+                    placeholder="e.g. 1499"
                     value={formData.price}
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                     className="field tabular-nums"
@@ -1594,7 +1674,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                     min="1"
                     step="1"
                     inputMode="numeric"
-                    placeholder="2999"
+                    placeholder="No sale"
                     value={formData.salePrice}
                     onChange={(e) => setFormData({ ...formData, salePrice: e.target.value })}
                     className="field tabular-nums"
@@ -1685,19 +1765,19 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
 
               </fieldset>
 
-              {/* Modal Buttons */}
-              <div className="flex items-center justify-end space-x-3 pt-4 border-t border-line">
+              {/* Modal Buttons: stay in view at the bottom while the form scrolls */}
+              <div className="sticky bottom-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-4 bg-surface border-t border-line flex items-center justify-end space-x-3">
                 <button
                   type="button"
                   onClick={closeProductModal}
-                  disabled={savingProduct || imageUploading}
+                  disabled={savingProduct || imageUploading || codeBusy}
                   className="btn btn-secondary"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={savingProduct || imageUploading}
+                  disabled={savingProduct || imageUploading || codeBusy}
                   aria-busy={savingProduct}
                   className="btn btn-primary"
                 >
@@ -1971,120 +2051,63 @@ function OrderStatusControl({
 }
 
 /**
- * Slide-in section menu for screens narrower than the header tabs: every dashboard
- * section, then View Store and Sign Out. Choosing a section closes it; so do the
- * close button, the backdrop and Escape (focus handling via useOverlay).
+ * Dashboard sections along the bottom of the screen on phones and tablets (the header tabs
+ * take over from 1024px). Large tap targets, the order count and a "new" dot; it sits above
+ * the phone's home bar.
  */
-function AdminSectionMenu({
-  isOpen,
-  onClose,
+function AdminBottomNav({
   sections,
   activeSection,
   onSelect,
-  email,
-  onViewStore,
-  onSignOut,
-  signingOut,
 }: {
-  isOpen: boolean;
-  onClose: () => void;
   sections: { id: AdminSection; label: string; count?: number; newCount?: number }[];
   activeSection: AdminSection;
   onSelect: (id: AdminSection) => void;
-  email: string;
-  onViewStore: () => void;
-  onSignOut: () => void;
-  signingOut: boolean;
 }) {
-  const panelRef = useRef<HTMLDivElement>(null);
-  useOverlay(isOpen, onClose, panelRef);
-
-  // The header tabs take over from 1024px, so close the menu (and its scroll lock) there
-  useEffect(() => {
-    if (!isOpen) return;
-    const wide = window.matchMedia("(min-width: 1024px)");
-    const onChange = () => wide.matches && onClose();
-    onChange();
-    wide.addEventListener("change", onChange);
-    return () => wide.removeEventListener("change", onChange);
-  }, [isOpen]);
-
+  const icons: Record<AdminSection, typeof Package> = {
+    overview: LayoutDashboard,
+    products: Package,
+    inventory: Layers,
+    orders: ShoppingBag,
+    coupons: Ticket,
+  };
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div key="admin-section-menu" exit={{ pointerEvents: "none" }} className="fixed inset-0 z-50 flex lg:hidden">
-          <motion.div {...OVERLAY_MOTION.backdrop} className="overlay-backdrop" onClick={onClose} />
-          <motion.div
-            {...OVERLAY_MOTION.drawerLeft}
-            ref={panelRef}
-            tabIndex={-1}
-            id="admin-section-menu"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Dashboard menu"
-            className="relative z-10 flex flex-col w-[85%] max-w-[340px] h-full bg-surface text-ink shadow-2xl outline-none"
-          >
-            <div className="flex items-center justify-between gap-3 px-5 h-16 border-b border-line shrink-0">
-              <span className="eyebrow text-ink">Admin Dashboard</span>
-              <button type="button" onClick={onClose} aria-label="Close menu" className="btn-icon -mr-2">
-                <X className="w-5 h-5" strokeWidth={1.6} />
+    <nav
+      aria-label="Dashboard sections"
+      className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-surface/95 backdrop-blur-sm border-t border-line pb-[env(safe-area-inset-bottom)]"
+      id="admin-bottom-nav"
+    >
+      <ul className="grid grid-cols-5 max-w-xl mx-auto">
+        {sections.map((s) => {
+          const Icon = icons[s.id];
+          const current = s.id === activeSection;
+          return (
+            <li key={s.id}>
+              <button
+                type="button"
+                onClick={() => onSelect(s.id)}
+                aria-current={current ? "page" : undefined}
+                className={`relative w-full flex flex-col items-center justify-center gap-1 min-h-[3.75rem] px-1 text-[11px] font-semibold transition-colors ${
+                  current ? "text-maroon-600" : "text-ink-soft hover:text-ink"
+                }`}
+              >
+                {current && <span className="absolute top-0 inset-x-3 h-0.5 bg-maroon-600" aria-hidden="true" />}
+                <span className="relative">
+                  <Icon className="w-5 h-5" strokeWidth={current ? 2 : 1.6} aria-hidden="true" />
+                  {!!s.newCount && (
+                    <span className="absolute -top-1.5 -right-2.5 min-w-4 h-4 px-1 rounded-full bg-danger text-white text-[10px] leading-4 text-center tabular-nums">
+                      {s.newCount}
+                      <span className="sr-only"> new</span>
+                    </span>
+                  )}
+                </span>
+                <span>{s.label}</span>
               </button>
-            </div>
-
-            <nav aria-label="Dashboard sections" className="flex-1 overflow-y-auto overscroll-contain px-3 py-3">
-              <ul className="space-y-1">
-                {sections.map((s) => {
-                  const current = s.id === activeSection;
-                  return (
-                    <li key={s.id}>
-                      <button
-                        type="button"
-                        onClick={() => onSelect(s.id)}
-                        aria-current={current ? "page" : undefined}
-                        className={`w-full flex items-center justify-between gap-3 rounded-xs px-3 py-3 text-left text-sm font-semibold transition-colors ${
-                          current ? "bg-surface-muted text-ink" : "text-ink-soft hover:bg-surface-muted hover:text-ink"
-                        }`}
-                      >
-                        <span>{s.label}</span>
-                        <span className="flex items-center gap-2">
-                          {s.count !== undefined && (
-                            <span className="badge badge-neutral tabular-nums">{s.count}</span>
-                          )}
-                          {!!s.newCount && <span className="badge badge-sale tabular-nums">{s.newCount} new</span>}
-                          <ChevronRight className="w-4 h-4 text-muted" aria-hidden="true" />
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </nav>
-
-            <div className="border-t border-line px-5 py-4 space-y-3 shrink-0">
-              <p className="text-xs text-muted truncate" title={email}>
-                Signed in as <span className="text-ink-soft font-semibold">{email}</span>
-              </p>
-              <div className="flex gap-2">
-                <button type="button" onClick={onViewStore} className="btn btn-secondary btn-sm flex-1">
-                  <Store className="w-3.5 h-3.5" />
-                  <span>View Store</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={onSignOut}
-                  disabled={signingOut}
-                  aria-busy={signingOut}
-                  className="btn btn-ghost btn-sm flex-1"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>{signingOut ? "Signing out…" : "Sign Out"}</span>
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
   );
 }
 
@@ -2176,8 +2199,8 @@ function OrderAlertBar({
   const notificationLabel = {
     on: "Notifications on",
     off: "Turn on notifications",
-    blocked: "Notifications blocked in browser settings",
-    unsupported: "Notifications not available on this device",
+    blocked: "Notifications blocked",
+    unsupported: "No notifications on this device",
   }[notificationState];
 
   return (
@@ -2193,8 +2216,8 @@ function OrderAlertBar({
           </button>
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted">
-        <span>New orders are checked every minute while this page is open.</span>
+      <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-4 gap-y-1 text-xs text-muted">
+        <span className="w-full sm:w-auto">New orders are checked every minute while this page is open.</span>
         <button type="button" onClick={onToggleSound} aria-pressed={soundOn} className="btn btn-ghost btn-sm">
           {soundOn ? <Volume2 className="w-3.5 h-3.5" aria-hidden="true" /> : <VolumeX className="w-3.5 h-3.5" aria-hidden="true" />}
           {soundOn ? "Sound on" : "Sound off"}
@@ -2204,6 +2227,7 @@ function OrderAlertBar({
           onClick={onToggleNotifications}
           disabled={notificationState === "blocked" || notificationState === "unsupported"}
           aria-pressed={notificationState === "on"}
+          title={notificationState === "blocked" ? "Allow notifications for this site in the browser's settings" : undefined}
           className="btn btn-ghost btn-sm"
         >
           {notificationState === "on" ? <Bell className="w-3.5 h-3.5" aria-hidden="true" /> : <BellOff className="w-3.5 h-3.5" aria-hidden="true" />}
@@ -2232,9 +2256,17 @@ function ProductPhotos({
   onUploaded: (url: string) => void;
   onBusyChange: (busy: boolean) => void;
 }) {
-  const [stage, setStage] = useState<"idle" | "preparing" | "uploading">("idle");
+  const [stage, setStage] = useState<"idle" | "cropping" | "preparing" | "uploading">("idle");
   const [progress, setProgress] = useState(0);
   const [queue, setQueue] = useState({ done: 0, total: 0 });
+  // The photo whose part to keep is being chosen; answered with the part, or null to skip
+  const [cropping, setCropping] = useState<{ file: File; position?: string; answer: (area: CropArea | null) => void } | null>(null);
+  const askCrop = (file: File, position?: string) =>
+    new Promise<CropArea | null>((resolve) => setCropping({ file, position, answer: resolve }));
+  const answerCrop = (area: CropArea | null) => {
+    cropping?.answer(area);
+    setCropping(null);
+  };
   const [messages, setMessages] = useState<{ kind: "success" | "error"; text: string }[]>([]);
   const [address, setAddress] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -2262,9 +2294,16 @@ function ProductPhotos({
         notes.push({ kind: "error", text: `${file.name}: ${problem}` });
         continue;
       }
+      setStage("cropping");
+      const area = await askCrop(file, accepted.length > 1 ? `Photo ${index + 1} of ${accepted.length}` : undefined);
+      if (!area) {
+        notes.push({ kind: "error", text: `${file.name}: skipped.` });
+        setQueue({ done: index + 1, total: accepted.length });
+        continue;
+      }
       setStage("preparing");
       setProgress(0);
-      const prepared = await compressImage(file);
+      const prepared = await compressImage(file, area);
       if (!prepared.ok) {
         notes.push({ kind: "error", text: `${file.name}: ${prepared.error}` });
         continue;
@@ -2370,15 +2409,25 @@ function ProductPhotos({
             />
           </label>
           <span id="admin-product-image-upload-help" className="text-xs text-muted">
-            From your phone, laptop or any device. JPEG, PNG or WebP; each is resized and compressed for the web.
+            From your phone, laptop or any device. JPEG, PNG or WebP. You choose the part to show in the 3:4 shape used across the
+            site, then it is compressed for the web.
           </span>
         </div>
+
+        {cropping && (
+          <PhotoCropper
+            file={cropping.file}
+            position={cropping.position}
+            onConfirm={(area) => answerCrop(area)}
+            onSkip={() => answerCrop(null)}
+          />
+        )}
 
         {busy && (
           <div role="status" aria-live="polite">
             <div className="text-xs text-muted mb-1">
               {queue.total > 1 ? `Photo ${Math.min(queue.done + 1, queue.total)} of ${queue.total}: ` : ""}
-              {stage === "preparing" ? "Preparing…" : `Uploading… ${Math.round(progress * 100)}%`}
+              {stage === "cropping" ? "Choosing the part to show…" : stage === "preparing" ? "Preparing…" : `Uploading… ${Math.round(progress * 100)}%`}
             </div>
             <progress
               className="w-full h-1.5 accent-[var(--color-maroon-600)]"

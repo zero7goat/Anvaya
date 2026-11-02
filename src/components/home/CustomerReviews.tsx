@@ -61,7 +61,7 @@ export default function CustomerReviews({ onProductClick }: { onProductClick: (p
                 onClick={() => onProductClick(product)}
                 className="mt-5 pt-4 border-t border-line flex items-center gap-3 text-left group cursor-pointer"
               >
-                <span className="w-10 h-12 shrink-0 overflow-hidden bg-surface-muted">
+                <span className="w-9 h-12 shrink-0 overflow-hidden bg-surface-muted">
                   <ProductImage src={getProductImage(product)} alt="" className="w-full h-full object-cover" compact loading="lazy" />
                 </span>
                 <span className="min-w-0 text-xs">

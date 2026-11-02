@@ -1,10 +1,12 @@
 /**
  * PRODUCT PHOTO UPLOADS (Supabase Storage)
  *
- * The admin picks JPEG, PNG or WebP photos from any device; the browser shrinks each to at
- * most 1600px on its longest side and saves it as WebP (aiming for about 500 KB, never over
- * 5 MB), then uploads it to the public "product-images" bucket. Photo addresses are saved
- * with the product (image, then additional_images).
+ * The admin picks JPEG, PNG or WebP photos from any device and chooses the part to keep in a
+ * 3:4 frame, the shape every product photo is shown in on the site (cards, gallery, quick
+ * view), so photos fill their frames on every device with nothing cut off and no empty
+ * bands. The browser saves that part as WebP at up to 1200 x 1600 (aiming for about 500 KB,
+ * never over 5 MB), then uploads it to the public "product-images" bucket. Photo addresses
+ * are saved with the product (image, then additional_images).
  *
  * A photo removed from a product is deleted from the bucket after the product is saved, and
  * deleting a product deletes its photos. Only files in this bucket are ever deleted.
@@ -32,6 +34,19 @@ export const checkImageFile = (file: { type: string; size: number }): string | n
   if (file.size > MAX_SOURCE_BYTES) return "This photo is over 30 MB. Choose a smaller one.";
   if (file.size === 0) return "This file is empty.";
   return null;
+};
+
+/** Product photo shape: 3 wide by 4 tall, saved at up to 1200 x 1600 */
+export const PHOTO_ASPECT = 3 / 4;
+export const PHOTO_WIDTH = 1200;
+
+/** A part of the picked photo, in its pixels (after the camera's rotation is applied) */
+export type CropArea = { x: number; y: number; width: number; height: number };
+
+/** Saved size for a chosen part: exactly 3:4, never larger than the part itself */
+export const croppedSize = (area: Pick<CropArea, "width">) => {
+  const width = Math.max(3, Math.min(PHOTO_WIDTH, Math.round(area.width)));
+  return { width, height: Math.round((width / 3) * 4) };
 };
 
 /** Width and height scaled down (never up) so the longest side is at most `max` */
@@ -65,15 +80,21 @@ export const describeUploadError = (status: number, message: string): string => 
 const toBlob = (canvas: HTMLCanvasElement, quality: number) =>
   new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", quality));
 
-/** Shrinks and converts the photo to WebP in the browser */
-export async function compressImage(file: File): Promise<{ ok: true; blob: Blob; error?: undefined } | { ok: false; error: string; blob?: undefined }> {
+/**
+ * Shrinks and converts the photo to WebP in the browser. With `crop`, only that part is
+ * kept, at exactly 3:4; without it the whole photo is kept, scaled to fit 1600px.
+ */
+export async function compressImage(
+  file: File,
+  crop?: CropArea
+): Promise<{ ok: true; blob: Blob; error?: undefined } | { ok: false; error: string; blob?: undefined }> {
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
   } catch {
     return { ok: false, error: "This photo couldn't be read. Try saving it again as JPEG or PNG." };
   }
-  const { width, height } = fitWithin(bitmap.width, bitmap.height);
+  const { width, height } = crop ? croppedSize(crop) : fitWithin(bitmap.width, bitmap.height);
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -82,7 +103,15 @@ export async function compressImage(file: File): Promise<{ ok: true; blob: Blob;
     bitmap.close();
     return { ok: false, error: "This browser can't prepare photos. Paste an image address instead." };
   }
-  ctx.drawImage(bitmap, 0, 0, width, height);
+  ctx.imageSmoothingQuality = "high";
+  if (crop) {
+    // The cropper keeps the frame inside the photo; white covers any rounding at its edges
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(bitmap, crop.x, crop.y, crop.width, crop.height, 0, 0, width, height);
+  } else {
+    ctx.drawImage(bitmap, 0, 0, width, height);
+  }
   bitmap.close();
   const blobs: Blob[] = [];
   for (const quality of [0.85, 0.78, 0.7, 0.6]) {

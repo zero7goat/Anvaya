@@ -163,6 +163,19 @@ export function checkProductForm(form: ProductFormValues): Checked<ProductDraft>
   };
 }
 
+/**
+ * A product code as typed (shown in capitals, e.g. ALK3K01) turned into the product's id:
+ * 3 to 40 letters, digits and hyphens, starting with a letter or digit. The database
+ * checks the same rule (supabase/drafts/product_code_change.sql).
+ */
+export const checkProductCode = (text: string): Checked<string> => {
+  const id = text.trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9-]{2,39}$/.test(id)) {
+    return { ok: false, error: "Use 3 to 40 letters, numbers or hyphens for the product code, e.g. ALK3K11." };
+  }
+  return { ok: true, value: id };
+};
+
 /** A new product id, created once per "Add product" form so a retried save can't make a duplicate */
 export const newProductId = (): string =>
   `anv-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
