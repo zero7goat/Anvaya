@@ -111,6 +111,7 @@ const kurta: ProductDraft = {
   price: 2999,
   salePrice: 1999,
   image: "",
+  additionalImages: [],
   isFeatured: false,
   isNewArrival: true,
   status: "enabled",

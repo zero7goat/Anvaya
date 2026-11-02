@@ -25,6 +25,7 @@ export const MAX_NAME_LENGTH = 120;
 export const MAX_DESCRIPTION_LENGTH = 2000;
 export const MAX_PRICE = 1_000_000; // ₹10,00,000
 export const MAX_STOCK = 9999;
+export const MAX_PHOTOS = 8; // main photo plus gallery
 
 /** What the product form holds (prices as typed) */
 export interface ProductFormValues {
@@ -36,6 +37,8 @@ export interface ProductFormValues {
   price: string;
   salePrice: string;
   image: string;
+  /** Gallery photos shown after the main one */
+  additionalImages?: string[];
   isFeatured: boolean;
   isNewArrival: boolean;
   status: "enabled" | "disabled";
@@ -52,6 +55,7 @@ export interface ProductDraft {
   price: number;
   salePrice?: number;
   image: string;
+  additionalImages: string[];
   isFeatured: boolean;
   isNewArrival: boolean;
   status: "enabled" | "disabled";
@@ -121,10 +125,14 @@ export function checkProductForm(form: ProductFormValues): Checked<ProductDraft>
     salePrice = sale;
   }
 
-  const image = form.image.trim();
-  if (!isAllowedImage(image)) {
+  // The main photo comes first; with no main photo, the first gallery photo takes its place
+  const photos = [form.image, ...(form.additionalImages ?? [])].map((p) => p.trim()).filter(Boolean);
+  const unique = Array.from(new Set(photos));
+  if (unique.some((p) => !isAllowedImage(p))) {
     return { ok: false, error: "Use an image address starting with https:// or a site file starting with /images/." };
   }
+  if (unique.length > MAX_PHOTOS) return { ok: false, error: `A product can have up to ${MAX_PHOTOS} photos.` };
+  const [image = "", ...additionalImages] = unique;
 
   const sizeStock: Record<string, number> = {};
   for (const size of getSizeOptionsFor(category)) {
@@ -146,6 +154,7 @@ export function checkProductForm(form: ProductFormValues): Checked<ProductDraft>
       price,
       salePrice,
       image,
+      additionalImages,
       isFeatured: Boolean(form.isFeatured),
       isNewArrival: Boolean(form.isNewArrival),
       status: form.status,

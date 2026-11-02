@@ -14,7 +14,7 @@ import { MAX_ORDERS, orderApi, nextPaymentStatus, nextStatuses, type OrderStatus
 import { authService, AdminAuthState } from "../services/authService";
 import { catalogueAdmin, SaveResult } from "../services/catalogueAdmin";
 import {
-  COLLECTION_STYLES, MAX_DESCRIPTION_LENGTH, MAX_NAME_LENGTH, MAX_STOCK, checkProductForm, newProductId,
+  COLLECTION_STYLES, MAX_DESCRIPTION_LENGTH, MAX_NAME_LENGTH, MAX_PHOTOS, MAX_STOCK, checkProductForm, isAllowedImage, newProductId,
 } from "../utils/productRules";
 import { BOUTIQUE_CONFIG } from "../config";
 import ProductImage from "./ProductImage";
@@ -26,7 +26,13 @@ import { ALL_SIZES, FREE_SIZE, describeSize, getSizeOptions, getSizeOptionsFor }
 import { filterInventory } from "../utils/inventorySearch";
 import { useNewOrderAlerts, type NotificationState } from "../hooks/useNewOrderAlerts";
 import { ORDER_POLL_MS } from "../services/orderAlerts";
-import { ACCEPTED_IMAGE_TYPES, checkImageFile, compressImage, uploadProductImage } from "../services/imageUpload";
+import {
+  ACCEPTED_IMAGE_TYPES, checkImageFile, compressImage, deleteProductImages, photosToDelete, uploadProductImage,
+} from "../services/imageUpload";
+
+// Every photo of a product, main photo first
+const productPhotos = (p: { image: string; additionalImages?: string[] }): string[] =>
+  [p.image, ...(p.additionalImages ?? [])].filter((url) => url.trim() !== "");
 
 type AdminSection = "overview" | "products" | "inventory" | "orders" | "coupons";
 
@@ -87,11 +93,15 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
     price: "",
     salePrice: "",
     image: "",
+    additionalImages: [] as string[],
     isFeatured: false,
     isNewArrival: true,
     status: "enabled" as "enabled" | "disabled",
     sizeStock: { "S": 4, "M": 6, "L": 6, "XL": 2, "XXL": 0 } as Record<string, number | string>
   });
+  // Photos uploaded while the form is open: deleted again if the form is closed without
+  // saving them, so no unused files are left in storage
+  const formUploadsRef = useRef<string[]>([]);
   const [formError, setFormError] = useState("");
   // Id for the product being added, made once per form so a retried save can't add it twice
   const [newFormProductId, setNewFormProductId] = useState("");
@@ -335,11 +345,13 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
       price: "",
       salePrice: "",
       image: "",
+      additionalImages: [],
       isFeatured: false,
       isNewArrival: true,
       status: "enabled",
       sizeStock: { "S": 4, "M": 6, "L": 4, "XL": 2, "XXL": 0 }
     });
+    formUploadsRef.current = [];
     setNewFormProductId(newProductId());
     setFormError("");
     setIsProductModalOpen(true);
@@ -357,11 +369,13 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
       price: product.price.toString(),
       salePrice: product.salePrice ? product.salePrice.toString() : "",
       image: product.image,
+      additionalImages: product.additionalImages ?? [],
       isFeatured: !!product.isFeatured,
       isNewArrival: !!product.isNewArrival,
       status: product.status,
       sizeStock: Object.fromEntries(ALL_SIZES.map((sz) => [sz, product.sizeStock?.[sz] ?? 0]))
     });
+    formUploadsRef.current = [];
     setFormError("");
     setIsProductModalOpen(true);
   };
@@ -389,7 +403,14 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
         if (result.stockChanged) await showLiveStockInForm(editingProduct?.id ?? newFormProductId, editingProduct);
         return;
       }
-      await showSaved(editingProduct ? `Saved “${draft.name}”.` : `Added “${draft.name}”.`);
+      // Saved: delete the photos this product no longer uses from storage
+      const removed = await deleteProductImages(
+        photosToDelete(editingProduct ? productPhotos(editingProduct) : [], formUploadsRef.current, productPhotos(draft))
+      );
+      formUploadsRef.current = [];
+      const savedText = editingProduct ? `Saved “${draft.name}”.` : `Added “${draft.name}”.`;
+      await showSaved(savedText);
+      if (!removed.ok) setNotice({ kind: "warning", text: `${savedText} ${removed.error}` });
       setIsProductModalOpen(false);
     } finally {
       savingProductRef.current = false;
@@ -410,7 +431,16 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
   };
 
   const closeProductModal = () => {
-    if (!savingProductRef.current && !imageUploading) setIsProductModalOpen(false);
+    if (savingProductRef.current || imageUploading) return;
+    setIsProductModalOpen(false);
+    // Closed without saving: photos uploaded meanwhile aren't used by anything, so delete them
+    const unused = photosToDelete([], formUploadsRef.current, editingProduct ? productPhotos(editingProduct) : []);
+    formUploadsRef.current = [];
+    if (unused.length > 0) {
+      void deleteProductImages(unused).then((r) => {
+        if (!r.ok) setNotice({ kind: "warning", text: r.error });
+      });
+    }
   };
 
   // Handle Delete Product Confirmation
@@ -425,7 +455,10 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
     try {
       const result = await catalogueAdmin.deleteProduct(product.id);
       if (result.ok) {
+        // The product is gone, so its photos are deleted from storage too
+        const removed = await deleteProductImages(photosToDelete(productPhotos(product), [], []));
         await showSaved(`Deleted “${product.name}”.`);
+        if (!removed.ok) setNotice({ kind: "warning", text: `Deleted “${product.name}”. ${removed.error}` });
         setProductToDelete(null);
       } else {
         setDeleteError(result.error);
@@ -1569,44 +1602,25 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                 </div>
               </div>
 
-              {/* Image URL & Preview */}
-              <div>
-                <label htmlFor="admin-product-image" className="field-label">
-                  Product Image (optional)
-                </label>
-                <input
-                  id="admin-product-image"
-                  type="text"
-                  placeholder="/images/products/alk-001-front.jpg or https://..."
-                  value={formData.image}
-                  onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                  className="field"
-                  aria-describedby="admin-product-image-help"
+              {/* Photos: upload from this device, reorder, remove */}
+              {/* Keyed by product, so a new form starts without the last upload's state */}
+              <React.Fragment key={editingProduct?.id ?? newFormProductId}>
+                <ProductPhotos
+                  productId={editingProduct?.id ?? newFormProductId}
+                  photos={productPhotos(formData)}
+                  onChange={(photos) =>
+                    setFormData((prev) => ({ ...prev, image: photos[0] ?? "", additionalImages: photos.slice(1) }))
+                  }
+                  onUploaded={(url) => {
+                    formUploadsRef.current = [...formUploadsRef.current, url];
+                    setFormData((prev) => {
+                      const photos = [...productPhotos(prev), url];
+                      return { ...prev, image: photos[0], additionalImages: photos.slice(1) };
+                    });
+                  }}
+                  onBusyChange={setImageUploading}
                 />
-                <p id="admin-product-image-help" className="field-help">
-                  Upload a photo below, or use a local file in public/images/products (e.g. /images/products/alk-001-front.jpg)
-                  or a full https:// URL. Leave empty to show the &ldquo;Image coming soon&rdquo; placeholder. Files mapped in
-                  src/data/imageRegistry.ts take priority.
-                </p>
-                {/* Keyed by product, so a new form starts without the last upload's state */}
-                <React.Fragment key={editingProduct?.id ?? newFormProductId}>
-                  <ProductImageUpload
-                    productId={editingProduct?.id ?? newFormProductId}
-                    onBusyChange={setImageUploading}
-                    onUploaded={(url) => setFormData((prev) => ({ ...prev, image: url }))}
-                  />
-                </React.Fragment>
-                <div className="mt-2 flex items-center space-x-3 p-2 panel-muted">
-                  {/* Shows the placeholder when empty or when the image cannot be loaded */}
-                  <ProductImage
-                    src={formData.image.trim()}
-                    alt="Product image preview"
-                    className="w-12 h-16 object-cover"
-                    compact
-                  />
-                  <span className="text-xs text-muted">Preview</span>
-                </div>
-              </div>
+              </React.Fragment>
 
               {/* Size Stocks */}
               <div>
@@ -2200,111 +2214,212 @@ function OrderAlertBar({
   );
 }
 
-// Upload a product photo to Supabase Storage (services/imageUpload.ts). The photo is shrunk
-// to WebP in the browser first; when the upload works its address fills the image field
-// above, and the product is saved as usual. Nothing here deletes older photos.
-function ProductImageUpload({
+// Product photos in the admin form. Photos are picked from this device (phone camera roll,
+// laptop folder, any browser), shrunk to WebP in the browser and uploaded to Supabase Storage
+// (services/imageUpload.ts) one by one. The first photo is the main one. Removing a photo
+// takes it off the product; the file itself is deleted from storage when the product is
+// saved (or, for a photo uploaded in this form, when the form is closed without saving).
+function ProductPhotos({
   productId,
+  photos,
+  onChange,
   onUploaded,
   onBusyChange,
 }: {
   productId: string;
+  photos: string[];
+  onChange: (photos: string[]) => void;
   onUploaded: (url: string) => void;
   onBusyChange: (busy: boolean) => void;
 }) {
-  const [stage, setStage] = useState<"idle" | "preparing" | "uploading" | "done" | "error">("idle");
+  const [stage, setStage] = useState<"idle" | "preparing" | "uploading">("idle");
   const [progress, setProgress] = useState(0);
-  const [message, setMessage] = useState("");
-  const [preview, setPreview] = useState<string | null>(null);
+  const [queue, setQueue] = useState({ done: 0, total: 0 });
+  const [messages, setMessages] = useState<{ kind: "success" | "error"; text: string }[]>([]);
+  const [address, setAddress] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-  const busy = stage === "preparing" || stage === "uploading";
-
-  // The local preview is a temporary browser address: release it when replaced or closed
-  useEffect(() => () => {
-    if (preview) URL.revokeObjectURL(preview);
-  }, [preview]);
+  const busy = stage !== "idle";
+  const room = MAX_PHOTOS - photos.length;
 
   useEffect(() => {
     onBusyChange(busy);
   }, [busy]);
   useEffect(() => () => onBusyChange(false), []);
 
-  const handleFile = async (file: File | undefined) => {
-    if (inputRef.current) inputRef.current.value = ""; // the same file can be picked again
-    if (!file || busy) return;
-    const problem = checkImageFile(file);
-    if (problem) {
-      setStage("error");
-      setMessage(problem);
+  const handleFiles = async (list: FileList | null) => {
+    const files = Array.from(list ?? []);
+    if (inputRef.current) inputRef.current.value = ""; // the same files can be picked again
+    if (files.length === 0 || busy) return;
+    const notes: { kind: "success" | "error"; text: string }[] = [];
+    const accepted = files.slice(0, Math.max(0, room));
+    if (files.length > accepted.length) {
+      notes.push({ kind: "error", text: `A product can have up to ${MAX_PHOTOS} photos, so ${files.length - accepted.length} weren't added.` });
+    }
+    setQueue({ done: 0, total: accepted.length });
+    for (const [index, file] of accepted.entries()) {
+      const problem = checkImageFile(file);
+      if (problem) {
+        notes.push({ kind: "error", text: `${file.name}: ${problem}` });
+        continue;
+      }
+      setStage("preparing");
+      setProgress(0);
+      const prepared = await compressImage(file);
+      if (!prepared.ok) {
+        notes.push({ kind: "error", text: `${file.name}: ${prepared.error}` });
+        continue;
+      }
+      setStage("uploading");
+      const result = await uploadProductImage(productId, prepared.blob, setProgress);
+      setQueue({ done: index + 1, total: accepted.length });
+      if (result.ok) {
+        onUploaded(result.url);
+        notes.push({ kind: "success", text: `${file.name}: uploaded (${Math.round(prepared.blob.size / 1024)} KB).` });
+      } else {
+        notes.push({ kind: "error", text: `${file.name}: ${result.error}` });
+        // The same reason (session, access rules, connection) would stop the rest too
+        if (!/too large|couldn't be read|still over/i.test(result.error)) break;
+      }
+    }
+    setStage("idle");
+    if (notes.some((n) => n.kind === "success")) notes.push({ kind: "success", text: "Save the product to keep the new photos." });
+    setMessages(notes);
+  };
+
+  const addAddress = () => {
+    const url = address.trim();
+    if (!url) return;
+    if (!isAllowedImage(url)) {
+      setMessages([{ kind: "error", text: "Use an image address starting with https:// or a site file starting with /images/." }]);
       return;
     }
-    setStage("preparing");
-    setMessage("");
-    setProgress(0);
-    const prepared = await compressImage(file);
-    if (!prepared.ok) {
-      setStage("error");
-      setMessage(prepared.error);
+    if (photos.includes(url)) {
+      setMessages([{ kind: "error", text: "This photo is already added." }]);
       return;
     }
-    setPreview(URL.createObjectURL(prepared.blob));
-    setStage("uploading");
-    const result = await uploadProductImage(productId, prepared.blob, setProgress);
-    if (result.ok) {
-      onUploaded(result.url);
-      setStage("done");
-      setMessage(`Uploaded (${Math.round(prepared.blob.size / 1024)} KB WebP). Save the product to use it.`);
-    } else {
-      setStage("error");
-      setMessage(result.error);
+    if (room <= 0) {
+      setMessages([{ kind: "error", text: `A product can have up to ${MAX_PHOTOS} photos.` }]);
+      return;
     }
+    onChange([...photos, url]);
+    setAddress("");
+    setMessages([]);
+  };
+
+  const move = (from: number, to: number) => {
+    const next = [...photos];
+    const [photo] = next.splice(from, 1);
+    next.splice(to, 0, photo);
+    onChange(next);
   };
 
   return (
-    <div className="mt-2 panel-muted p-3 space-y-2" id="admin-product-image-upload">
-      <div className="flex flex-wrap items-center gap-3">
-        <label className={`btn btn-secondary btn-sm ${busy ? "opacity-60 pointer-events-none" : "cursor-pointer"}`}>
-          <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-          <span>{busy ? "Uploading…" : "Upload photo"}</span>
-          <input
-            ref={inputRef}
-            type="file"
-            accept={ACCEPTED_IMAGE_TYPES.join(",")}
-            className="sr-only"
-            disabled={busy}
-            onChange={(e) => void handleFile(e.target.files?.[0])}
-            aria-describedby="admin-product-image-upload-help"
-          />
-        </label>
-        <span id="admin-product-image-upload-help" className="text-xs text-muted">
-          JPEG, PNG or WebP. Saved as WebP, at most 1600px and 5 MB.
-        </span>
-      </div>
+    <div id="admin-product-photos">
+      <span className="field-label">Product Photos (optional, up to {MAX_PHOTOS})</span>
+      <p className="field-help mt-0 mb-2" id="admin-product-photos-help">
+        The first photo is the main one. With no photos the shop shows &ldquo;Image coming soon&rdquo;. Removed photos
+        are deleted from storage when you save.
+      </p>
 
-      {(busy || preview) && (
-        <div className="flex items-center gap-3">
-          {preview && <img src={preview} alt="Photo being uploaded" className="w-12 h-16 object-cover rounded-xs border border-line" />}
-          {busy && (
-            <div className="flex-1 min-w-0" role="status" aria-live="polite">
-              <div className="text-xs text-muted mb-1">
-                {stage === "preparing" ? "Preparing photo…" : `Uploading… ${Math.round(progress * 100)}%`}
+      {photos.length > 0 && (
+        <ul className="grid grid-cols-3 min-[480px]:grid-cols-4 gap-2 mb-2" aria-label="Product photos">
+          {photos.map((url, index) => (
+            <li key={url} className="panel-muted p-1.5 flex flex-col gap-1.5">
+              <div className="relative">
+                <ProductImage src={url} alt={`Photo ${index + 1}`} className="w-full aspect-[3/4] object-cover" compact />
+                {index === 0 && <span className="badge badge-success absolute top-1 left-1">Main</span>}
               </div>
-              <progress
-                className="w-full h-1.5 accent-[var(--color-maroon-600)]"
-                max={1}
-                value={stage === "preparing" ? undefined : progress}
-                aria-label="Photo upload progress"
-              />
-            </div>
-          )}
-        </div>
+              <div className="flex flex-wrap items-center justify-between gap-1">
+                {index > 0 ? (
+                  <button type="button" onClick={() => move(index, 0)} disabled={busy} className="btn btn-ghost btn-sm !px-1.5 !text-[11px]">
+                    Make main
+                  </button>
+                ) : (
+                  <span />
+                )}
+                <button
+                  type="button"
+                  onClick={() => onChange(photos.filter((p) => p !== url))}
+                  disabled={busy}
+                  className="btn-icon btn-icon-sm"
+                  aria-label={`Remove photo ${index + 1}`}
+                  title="Remove photo"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
 
-      {message && (
-        <p className={stage === "error" ? "field-error" : "field-help !text-success"} role={stage === "error" ? "alert" : "status"}>
-          {message}
-        </p>
-      )}
+      <div className="panel-muted p-3 space-y-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <label className={`btn btn-secondary btn-sm ${busy || room <= 0 ? "opacity-60 pointer-events-none" : "cursor-pointer"}`}>
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>{busy ? "Uploading…" : "Upload photos"}</span>
+            <input
+              ref={inputRef}
+              type="file"
+              accept={ACCEPTED_IMAGE_TYPES.join(",")}
+              multiple
+              className="sr-only"
+              disabled={busy || room <= 0}
+              onChange={(e) => void handleFiles(e.target.files)}
+              aria-describedby="admin-product-image-upload-help"
+            />
+          </label>
+          <span id="admin-product-image-upload-help" className="text-xs text-muted">
+            From your phone, laptop or any device. JPEG, PNG or WebP; each is resized and compressed for the web.
+          </span>
+        </div>
+
+        {busy && (
+          <div role="status" aria-live="polite">
+            <div className="text-xs text-muted mb-1">
+              {queue.total > 1 ? `Photo ${Math.min(queue.done + 1, queue.total)} of ${queue.total}: ` : ""}
+              {stage === "preparing" ? "Preparing…" : `Uploading… ${Math.round(progress * 100)}%`}
+            </div>
+            <progress
+              className="w-full h-1.5 accent-[var(--color-maroon-600)]"
+              max={1}
+              value={stage === "preparing" ? undefined : progress}
+              aria-label="Photo upload progress"
+            />
+          </div>
+        )}
+
+        {messages.length > 0 && (
+          <ul className="space-y-0.5">
+            {messages.map((m, i) => (
+              <li key={i} className={m.kind === "error" ? "field-error" : "field-help !text-success"} role={m.kind === "error" ? "alert" : "status"}>
+                {m.text}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addAddress();
+              }
+            }}
+            placeholder="Or paste an image address (https://…)"
+            aria-label="Image address"
+            className="field field-sm flex-1 min-w-0"
+            disabled={busy}
+          />
+          <button type="button" onClick={addAddress} disabled={busy || !address.trim()} className="btn btn-secondary btn-sm shrink-0">
+            Add
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

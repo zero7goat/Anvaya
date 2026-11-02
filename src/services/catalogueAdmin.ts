@@ -36,6 +36,7 @@ export type ProductRow = {
   price: number;
   sale_price: number | null;
   image: string;
+  additional_images: string[];
   is_featured: boolean;
   is_new_arrival: boolean;
   status: "enabled" | "disabled";
@@ -97,6 +98,7 @@ export const draftToRow = (draft: ProductDraft): ProductRow => ({
   price: draft.price,
   sale_price: draft.salePrice ?? null,
   image: draft.image,
+  additional_images: draft.additionalImages,
   is_featured: draft.isFeatured,
   is_new_arrival: draft.isNewArrival,
   status: draft.status,

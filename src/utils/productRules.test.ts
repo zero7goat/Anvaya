@@ -85,3 +85,18 @@ test("new product ids are unique", () => {
   assert.equal(ids.size, 200);
   assert.match([...ids][0], /^anv-[a-z0-9]+-[a-z0-9]+$/);
 });
+
+test("photos: the main one first, then the gallery, without repeats, up to the limit", () => {
+  const two = checkProductForm(kurtaForm({ image: " https://e.com/a.webp ", additionalImages: ["https://e.com/b.webp", "https://e.com/a.webp", " "] }));
+  assert.equal(two.value!.image, "https://e.com/a.webp");
+  assert.deepEqual(two.value!.additionalImages, ["https://e.com/b.webp"]);
+  // No main photo: the first gallery photo takes its place
+  const moved = checkProductForm(kurtaForm({ image: "", additionalImages: ["https://e.com/b.webp"] }));
+  assert.equal(moved.value!.image, "https://e.com/b.webp");
+  assert.deepEqual(moved.value!.additionalImages, []);
+  const none = checkProductForm(kurtaForm({ image: "" }));
+  assert.equal(none.value!.image, "");
+  assert.match(errorOf(kurtaForm({ additionalImages: ["javascript:alert(1)"] })), /https:\/\//);
+  const many = Array.from({ length: 8 }, (_, i) => `https://e.com/${i}.webp`);
+  assert.match(errorOf(kurtaForm({ additionalImages: many })), /up to 8 photos/);
+});
