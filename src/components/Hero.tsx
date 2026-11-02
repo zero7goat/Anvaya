@@ -11,7 +11,7 @@ import CollectionSpotlight from "./home/CollectionSpotlight";
 import ShopByStyle from "./home/ShopByStyle";
 import CustomerReviews from "./home/CustomerReviews";
 import BrandStory from "./home/BrandStory";
-import { SITE_IMAGES, HeroSlide } from "../data/imageRegistry";
+import { SITE_IMAGES, HeroSlide, getProductImage } from "../data/imageRegistry";
 import { IMAGE_WIDTHS, imageAtWidth, responsiveImage } from "../utils/imageSources";
 import { BackgroundMotif } from "./decor/Motifs";
 import MobileHero from "./home/MobileHero";
@@ -131,6 +131,13 @@ export default function Hero({
   const collectionCounts: Record<CollectionType, number> = {
     alankritha: productService.getProducts({ collection: "alankritha" }).length,
     ayanaa: productService.getProducts({ collection: "ayanaa" }).length,
+  };
+
+  // Arch covers: the registry image if set, else the newest published piece with a photo
+  const archCover = (col: CollectionType) => {
+    if (SITE_IMAGES.collectionCovers[col]) return SITE_IMAGES.collectionCovers[col];
+    const withPhoto = productService.getProducts({ collection: col, sortBy: "newest" }).find((p) => getProductImage(p));
+    return withPhoto ? getProductImage(withPhoto) : "";
   };
 
   const handleCollectionNav = (col: CollectionType) => {
@@ -276,7 +283,7 @@ export default function Hero({
                   <rect width="300" height="400" fill="url(#maroon-grad-1)" clipPath="url(#arch-clip-alankritha)" />
 
                   {/* Collection cover (from the image registry) */}
-                  <ArchCover src={SITE_IMAGES.collectionCovers.alankritha} clipId="arch-clip-alankritha" />
+                  <ArchCover src={archCover("alankritha")} clipId="arch-clip-alankritha" />
 
                   {/* Subtle Dark Luxury Scrim */}
                   <path
@@ -327,7 +334,7 @@ export default function Hero({
                   <rect width="300" height="400" fill="url(#maroon-grad-2)" clipPath="url(#arch-clip-ayanaa)" />
 
                   {/* Collection cover (from the image registry) */}
-                  <ArchCover src={SITE_IMAGES.collectionCovers.ayanaa} clipId="arch-clip-ayanaa" />
+                  <ArchCover src={archCover("ayanaa")} clipId="arch-clip-ayanaa" />
 
                   {/* Subtle Dark Luxury Scrim */}
                   <path

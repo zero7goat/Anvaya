@@ -106,9 +106,10 @@ export const SITE_IMAGES = {
       alt: "The festive favourites",
     },
   ] as HeroSlide[],
-  // Arched "Our Collections" cards and collection metadata
+  // Arched "Our Collections" cards and collection metadata.
+  // Empty = the newest published piece of that collection with a photo (see Hero)
   collectionCovers: {
-    alankritha: "https://www.lakshita.com/cdn/shop/files/Artboard_6.jpg_1.jpg?v=1785838580&width=700",
+    alankritha: "",
     // Royal Mayura Banarasi saree (alk-005) photo
     ayanaa: "https://cdn.shopify.com/s/files/1/0049/3649/9315/products/koskii-maroon-zariwork-banarasi-designer-saree-saus0018941_maroon_6_800x800.jpg?v=1748424817&width=480",
   },

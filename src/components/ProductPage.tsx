@@ -24,6 +24,8 @@ import ProductInfoSections from "./ProductInfoSections";
 import NotFoundPage from "./NotFoundPage";
 import SizePrompt, { focusFirstSize } from "./SizePrompt";
 import { BackgroundMotif } from "./decor/Motifs";
+import { colourOptions } from "../utils/productDetails";
+import { getProductImage } from "../data/imageRegistry";
 
 interface ProductPageProps {
   productId: string;
@@ -120,7 +122,12 @@ function ProductDetails({
     : 0;
 
   // Recomputed every render so stock shown on similar cards is always current
-  const similarProducts = productService.getSimilarProducts(product, 4);
+  // (other colours of this piece are picked above the sizes instead)
+  const colours = colourOptions(product, products);
+  const similarProducts = productService
+    .getSimilarProducts(product, 4 + colours.length)
+    .filter((p) => !colours.some((c) => c.product.id === p.id))
+    .slice(0, 4);
 
   // A sale may leave the chosen size with less stock than the chosen quantity
   useEffect(() => {
@@ -306,6 +313,38 @@ function ProductDetails({
               </div>
             </div>
 
+            {/* Other colours of this piece (each colour is its own product code) */}
+            {colours.length > 0 && (
+              <div className="space-y-2" id="product-colours">
+                <p className="field-label">
+                  Colour: <span className="font-normal normal-case tracking-normal text-ink">{colours.find((c) => c.product.id === product.id)?.colour}</span>
+                </p>
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Colour">
+                  {colours.map(({ product: option, colour }) => {
+                    const current = option.id === product.id;
+                    const photo = getProductImage(option);
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => !current && onOpenProduct(option)}
+                        aria-pressed={current}
+                        aria-label={`${colour}${current ? ", shown" : ""}`}
+                        className={`flex items-center gap-2 rounded-xs border bg-surface pr-3 text-sm cursor-pointer transition-colors ${
+                          current ? "border-ink ring-1 ring-ink" : "border-line-strong hover:border-ink"
+                        } ${photo ? "pl-0" : "pl-3 py-2"}`}
+                      >
+                        {photo && (
+                          <img src={photo} alt="" className="w-9 h-12 object-cover rounded-l-xs" loading="lazy" decoding="async" />
+                        )}
+                        <span>{colour}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Stock status */}
             <div aria-live="polite" id="product-stock-status">
               {isOutOfStock ? (
@@ -416,13 +455,7 @@ function ProductDetails({
               </div>
             )}
 
-            {/* Description */}
-            <div className="pt-6 border-t border-line">
-              <h2 className="heading-label mb-3">Description</h2>
-              <p className="text-body">{product.description}</p>
-            </div>
-
-            {/* Service badges, details / care / delivery / declaration, and help */}
+            {/* Service badges, details (with the description) / care / delivery / declaration, and help */}
             <ProductInfoSections product={product} />
 
             <button

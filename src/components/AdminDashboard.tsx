@@ -71,6 +71,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
   const [prodStatusFilter, setProdStatusFilter] = useState<"All" | "enabled" | "disabled">("All");
 
   const [inventorySearch, setInventorySearch] = useState("");
+  const [inventoryCollectionFilter, setInventoryCollectionFilter] = useState<"All" | CollectionType>("All");
 
   // Search & Filter states for orders
   const [orderSearch, setOrderSearch] = useState("");
@@ -292,7 +293,13 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
     });
   }, [products, prodCategoryFilter, prodCollectionFilter, prodStatusFilter, prodSearch]);
 
-  const inventoryProducts = useMemo(() => filterInventory(products, inventorySearch), [products, inventorySearch]);
+  const inventoryProducts = useMemo(
+    () =>
+      filterInventory(products, inventorySearch).filter(
+        (p) => inventoryCollectionFilter === "All" || p.collection === inventoryCollectionFilter
+      ),
+    [products, inventorySearch, inventoryCollectionFilter]
+  );
 
   // Filtered orders list
   const filteredOrders = useMemo(() => {
@@ -1245,7 +1252,19 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
               <p className="text-xs text-neutral-500 mt-0.5">
                 Quickly adjust variant quantities, restock batches, or zero-out depleted styles.
               </p>
-              <div className="relative mt-4">
+              <div className="mt-4 flex flex-col sm:flex-row gap-2">
+              <select
+                value={inventoryCollectionFilter}
+                onChange={(e) => setInventoryCollectionFilter(e.target.value as "All" | CollectionType)}
+                aria-label="Collection"
+                className="field field-sm field-touch w-full sm:w-auto"
+                id="admin-inventory-collection"
+              >
+                <option value="All">All Collections</option>
+                <option value="alankritha">Alankritha (Kurtas)</option>
+                <option value="ayanaa">Ayanaa (Sarees)</option>
+              </select>
+              <div className="relative flex-1">
                 <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" aria-hidden="true" />
                 <input
                   type="text"
@@ -1266,6 +1285,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}
+              </div>
               </div>
             </div>
 
@@ -1587,7 +1607,12 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="field"
+                  aria-describedby="admin-product-name-help"
                 />
+                <p id="admin-product-name-help" className="field-help">
+                  Same piece in more colours? Give each its own product with the colour in brackets, e.g.
+                  "Garden Whisper (Green)" and "Garden Whisper (Yellow)". The product page then lets shoppers switch colour.
+                </p>
               </div>
 
               {/* Description */}
@@ -1596,14 +1621,19 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                   Product Description *
                 </label>
                 <textarea
-                  rows={3}
+                  rows={4}
                   required
                   maxLength={MAX_DESCRIPTION_LENGTH}
-                  placeholder="Detailed description of weave, fabric composition, embroidery work, and care instructions..."
+                  placeholder="e.g. Neckline: Round neck. Sleeve type: 3/4th. Fabric: Jaipur cotton. Colour: Peach."
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className="field"
+                  aria-describedby="admin-product-description-help"
                 />
+                <p id="admin-product-description-help" className="field-help">
+                  Write each detail as "Label: value." and the product page lists them in two columns. Any sentence
+                  before the first label is shown as a short paragraph above them.
+                </p>
               </div>
 
               {/* Category & Collection Mapping: STRICTLY KURTAS OR SAREES */}

@@ -1,6 +1,7 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Banknote, Mail, Plus, Truck } from "lucide-react";
+import { Banknote, Mail, Minus, Plus, Truck } from "lucide-react";
+import { parseProductDetails } from "../utils/productDetails";
 import { Product } from "../types";
 import { BOUTIQUE_CONFIG } from "../config";
 import { getCollectionKey, getSizeOptions } from "../utils/productDisplay";
@@ -17,8 +18,10 @@ export default function ProductInfoSections({ product }: { product: Product }) {
   const codEnabled = BOUTIQUE_CONFIG.paymentMethods.some((m) => m.id === "cod" && m.enabled);
   const whatsappUrl = `https://wa.me/${BOUTIQUE_CONFIG.whatsappNumber}`;
   const phoneHref = `tel:${supportPhone.replace(/\s+/g, "")}`;
-  // Only one section is open at a time; opening another closes the current one
-  const [openSection, setOpenSection] = useState<string | null>(null);
+  const { intro, details } = useMemo(() => parseProductDetails(product.description), [product.description]);
+  // Only one section is open at a time; opening another closes the current one.
+  // Product Details starts open, as it holds the description
+  const [openSection, setOpenSection] = useState<string | null>("Product Details");
   const sectionProps = (title: string) => ({
     title,
     open: openSection === title,
@@ -44,14 +47,31 @@ export default function ProductInfoSections({ product }: { product: Product }) {
       {/* Expandable sections */}
       <div className="border-t border-line">
         <InfoSection {...sectionProps("Product Details")}>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5">
-            <DetailRow label="Collection">
-              {collection.name} {collection.byline}
-            </DetailRow>
-            <DetailRow label="Category">{product.category}</DetailRow>
-            {product.subcategory && <DetailRow label="Style">{product.subcategory}</DetailRow>}
-            <DetailRow label="Sizes">{getSizeOptions(product).join(", ")}</DetailRow>
-            <DetailRow label="Product code">{product.id.toUpperCase()}</DetailRow>
+          {intro && <ClampedText text={intro} />}
+          {/* "Label: value." parts of the description, two to a row; pieces without them
+              (only a paragraph) list their collection and style instead */}
+          <dl className={`grid grid-cols-2 gap-x-6 gap-y-4 ${intro ? "mt-4" : ""}`}>
+            {(details.length > 0
+              ? details
+              : [
+                  { label: "Collection", value: `${collection.name} ${collection.byline}` },
+                  { label: "Category", value: product.category },
+                  ...(product.subcategory ? [{ label: "Style", value: product.subcategory }] : []),
+                ]
+            ).map((d, i) => (
+              <div key={`${d.label}-${i}`}>
+                <dt className="font-semibold text-ink">{d.label}</dt>
+                <dd className="text-ink/85">{d.value}</dd>
+              </div>
+            ))}
+            <div>
+              <dt className="font-semibold text-ink">Sizes</dt>
+              <dd className="text-ink/85">{getSizeOptions(product).join(", ")}</dd>
+            </div>
+            <div>
+              <dt className="font-semibold text-ink">Product code</dt>
+              <dd className="text-ink/85">{product.id.toUpperCase()}</dd>
+            </div>
           </dl>
         </InfoSection>
 
@@ -164,11 +184,11 @@ function InfoSection({
           className="w-full flex items-center justify-between gap-4 py-5 text-left cursor-pointer"
         >
           <span className="text-sm font-bold uppercase tracking-[0.12em] text-ink">{title}</span>
-          <Plus
-            className={`w-4 h-4 shrink-0 text-ink transition-transform duration-300 ${open ? "rotate-45" : ""}`}
-            strokeWidth={3}
-            aria-hidden="true"
-          />
+          {open ? (
+            <Minus className="w-4 h-4 shrink-0 text-ink" strokeWidth={3} aria-hidden="true" />
+          ) : (
+            <Plus className="w-4 h-4 shrink-0 text-ink" strokeWidth={3} aria-hidden="true" />
+          )}
         </button>
       </h3>
       <AnimatePresence initial={false}>
@@ -184,6 +204,29 @@ function InfoSection({
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+/** A paragraph cut to three lines, with "View more" when it is longer. */
+function ClampedText({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const ref = useRef<HTMLParagraphElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el && !expanded) setOverflows(el.scrollHeight > el.clientHeight + 1);
+  }, [text, expanded]);
+  return (
+    <div>
+      <p ref={ref} className={expanded ? "" : "line-clamp-3"}>
+        {text}
+      </p>
+      {(overflows || expanded) && (
+        <button type="button" onClick={() => setExpanded(!expanded)} className="link text-maroon-600 mt-1 cursor-pointer">
+          {expanded ? "View less" : "View more"}
+        </button>
+      )}
     </div>
   );
 }

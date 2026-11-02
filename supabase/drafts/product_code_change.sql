@@ -1,4 +1,5 @@
--- ANVAYA product code change: NOT APPLIED yet
+-- ANVAYA product code change: APPLIED 2026-11-02 (Part 2 checks all PASS; a code change and
+-- change back on alk3k08 left its row and stock identical; non-admins are refused)
 --
 -- Adds public.admin_change_product_id(old, new), used by the admin dashboard's "Change code"
 -- button. A product's code is its id (shown in capitals, e.g. ALK3K01). Product stock,

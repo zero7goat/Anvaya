@@ -4,102 +4,11 @@ import { isSupabaseConfigured } from "../utils/supabaseConfig";
 import { customerReviews } from "../utils/reviews";
 
 /**
- * SAMPLE PRODUCT CATALOGUE FOR ANVAYA
- * 
- * Exclusively two distinct collections:
- * 1. ALANKRITHA - Exclusively Women's Kurtas
- * 2. AYANAA - Exclusively Women's Handwoven & Festive Sarees
+ * BUILT-IN CATALOGUE FOR ANVAYA: shown only when Supabase can't be reached or is slow.
+ * Holds the sarees that are also in Supabase. The old sample kurtas were removed so a slow
+ * connection never shows kurtas that are not for sale; the real kurtas come from Supabase.
  */
 export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
-  {
-    id: "alk-001",
-    name: "Turquoise Cotton Floral Printed Straight Kurta",
-    description: "An exquisite straight-cut cotton kurta adorned with traditional hand-block floral motifs, subtle gold Zari detailing on the neckline yoke, and fine side-slit tailoring.",
-    collection: "alankritha",
-    category: "Kurtas",
-    subcategory: "Straight Fit",
-    price: 3599,
-    salePrice: 2519,
-    // Supplied kurta image 10 (aqua print), closest match to Turquoise
-    image: "https://www.rangriti.com/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-rangriti-product-catalog/default/dw45884c06/images/ss26/rrtroz26228ss26aqa_1.jpg?sw=900&sh=1350&q=100&strip=false",
-    additionalImages: [],
-    sizeStock: { "S": 4, "M": 6, "L": 8, "XL": 2, "XXL": 0 },
-    reviews: [
-      {
-        id: "rev-01",
-        author: "Meenakshi K.",
-        rating: 5,
-        comment: "The fabric is so soft and breathable for everyday celebrations. Perfectly stitched!",
-        date: "2026-09-12",
-        verified: true,
-        brandReply: "Namaste Meenakshi! Thank you for trusting Alankritha for your ethnic wardrobe."
-      }
-    ],
-    isFeatured: true,
-    isNewArrival: true,
-    status: "enabled",
-    createdAt: "2026-08-01T10:00:00Z",
-    updatedAt: "2026-10-20T14:30:00Z"
-  },
-  {
-    id: "alk-002",
-    name: "Rust Printed Straight Kurta",
-    description: "Sophisticated rust orange straight-line silhouette kurta with artisanal print borders, three-quarter sleeves, and intricate geometric yoke prints.",
-    collection: "alankritha",
-    category: "Kurtas",
-    subcategory: "Straight Fit",
-    price: 3999,
-    salePrice: 2000,
-    // Supplied kurta image 8 (rust)
-    image: "https://www.rangriti.com/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-rangriti-product-catalog/default/dwa0a99ed8/images/ss26/ertnmoz22535ss26rus_1.jpg?sw=900&sh=1350&q=100&strip=false",
-    additionalImages: [],
-    sizeStock: { "S": 3, "M": 5, "L": 0, "XL": 2, "XXL": 0 }, // Size L out of stock
-    reviews: [],
-    isFeatured: true,
-    isNewArrival: false,
-    status: "enabled",
-    createdAt: "2026-08-05T12:00:00Z",
-    updatedAt: "2026-10-22T09:15:00Z"
-  },
-  {
-    id: "alk-003",
-    name: "Red Embroidered Art Silk Festive Kurta",
-    description: "Luxurious festive art silk kurta featuring rich resham and zari brocade embroidery around the mandarin collar and cuffs, crafted for regal celebrations.",
-    collection: "alankritha",
-    category: "Kurtas",
-    subcategory: "Straight Fit",
-    price: 5995,
-    salePrice: 3597,
-    // Supplied kurta image 6 (red embroidered)
-    image: "https://www.rangriti.com/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-rangriti-product-catalog/default/dw96a3de73/images/aw26/fstgm25559aw26red_1.jpg?sw=900&sh=1350&q=100&strip=false",
-    additionalImages: [],
-    sizeStock: { "S": 2, "M": 3, "L": 4, "XL": 1, "XXL": 0 },
-    reviews: [],
-    isFeatured: true,
-    isNewArrival: true,
-    status: "enabled",
-    createdAt: "2026-08-10T14:00:00Z",
-    updatedAt: "2026-10-24T16:45:00Z"
-  },
-  {
-    id: "alk-004",
-    name: "Emerald Pine Cotton Chevron Printed Kurta",
-    description: "A fresh combination of micro-florals and heritage chevron geometry in deep pine green. Tailored from premium 60-count combed cotton with mother-of-pearl buttons.",
-    collection: "alankritha",
-    category: "Kurtas",
-    subcategory: "Straight Fit",
-    price: 2599,
-    salePrice: 2079,
-    // Supplied kurta image 3 (green print)
-    image: "https://www.rangriti.com/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-rangriti-product-catalog/default/dw429fd652/images/aw26/wnt22718aw26grn_1.jpg?sw=900&sh=1350&q=100&strip=false",
-    sizeStock: { "S": 5, "M": 7, "L": 4, "XL": 3, "XXL": 0 },
-    reviews: [],
-    isFeatured: true,
-    isNewArrival: true,
-    status: "enabled",
-    createdAt: "2026-08-15T09:30:00Z",
-    updatedAt: "2026-10-25T11:00:00Z"
-  },
   {
     id: "alk-005",
     name: "Royal Mayura Banarasi Katan Silk Saree",
@@ -149,25 +58,6 @@ export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
     updatedAt: "2026-10-21T10:10:00Z"
   },
   {
-    id: "alk-007",
-    name: "Mustard Yellow Silk Chanderi Embroidered Kurta",
-    description: "Luminous turmeric mustard festive kurta crafted from genuine Chanderi silk with delicate mirror embroidery on the yoke and soft zari borders.",
-    collection: "alankritha",
-    category: "Kurtas",
-    subcategory: "A-Line",
-    price: 4299,
-    salePrice: 3499,
-    // Supplied kurta image (rust and maroon print): closest warm tone; no mustard kurta was supplied
-    image: "https://www.rangriti.com/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-rangriti-product-catalog/default/dw231372d9/images/aw26/fstgm26325aw26org_1.jpg?sw=900&sh=1350&q=100&strip=false",
-    sizeStock: { "S": 4, "M": 6, "L": 3, "XL": 2, "XXL": 0 },
-    reviews: [],
-    isFeatured: true,
-    isNewArrival: true,
-    status: "enabled",
-    createdAt: "2026-08-25T13:40:00Z",
-    updatedAt: "2026-10-19T17:25:00Z"
-  },
-  {
     id: "alk-008",
     name: "Midnight Indigo Kanjeevaram Soft Zari Saree",
     description: "Heirloom midnight indigo drape woven with intricate floral jaal in antique molten gold zari, accompanied by an ornate contrast brocade blouse piece.",
@@ -185,98 +75,6 @@ export const INITIAL_SAMPLE_PRODUCTS: Product[] = [
     status: "enabled",
     createdAt: "2026-09-01T08:00:00Z",
     updatedAt: "2026-10-23T14:00:00Z"
-  },
-  // NEW LISTINGS (added 2026-10-28) for the remaining supplied photos. Names and descriptions
-  // describe what the photo shows; prices and stock are starting values to review in the admin.
-  {
-    id: "alk-009",
-    name: "Coral Red Embroidered Flared Kurta",
-    description: "Flowing coral red kurta with a flared silhouette, an embroidered yoke and a sheer matching dupatta with a delicate edge.",
-    collection: "alankritha",
-    category: "Kurtas",
-    subcategory: "Anarkali",
-    price: 5499,
-    salePrice: 4399,
-    image: "https://www.rangriti.com/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-rangriti-product-catalog/default/dwa57d0d53/images/aw26/fstgm25514aw26red_1.jpg?sw=900&sh=1350&q=100&strip=false",
-    sizeStock: { "S": 3, "M": 4, "L": 3, "XL": 2, "XXL": 0 },
-    reviews: [],
-    isFeatured: true,
-    isNewArrival: true,
-    status: "enabled",
-    createdAt: "2026-10-10T10:00:00Z",
-    updatedAt: "2026-10-28T10:00:00Z"
-  },
-  {
-    id: "alk-010",
-    name: "Powder Blue Printed Short Kurta",
-    description: "Easy powder blue kurta with an ornamental medallion print, a V-neckline and three-quarter sleeves, cut to a shorter length for everyday wear.",
-    collection: "alankritha",
-    category: "Kurtas",
-    subcategory: "A-Line",
-    price: 2299,
-    salePrice: 1839,
-    image: "https://www.rangriti.com/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-rangriti-product-catalog/default/dw88c7fe02/images/ss26/ind22529ss26blu_1.jpg?sw=900&sh=1350&q=100&strip=false",
-    sizeStock: { "S": 5, "M": 6, "L": 4, "XL": 3, "XXL": 0 },
-    reviews: [],
-    isFeatured: false,
-    isNewArrival: true,
-    status: "enabled",
-    createdAt: "2026-10-11T10:00:00Z",
-    updatedAt: "2026-10-28T10:00:00Z"
-  },
-  {
-    id: "alk-011",
-    name: "Wine Printed Straight Kurta with Embroidered Yoke",
-    description: "Deep wine straight kurta with an all-over buta print, a contrast embroidered yoke and a teal-toned printed hem border.",
-    collection: "alankritha",
-    category: "Kurtas",
-    subcategory: "Straight Fit",
-    price: 3299,
-    salePrice: 2639,
-    image: "https://www.rangriti.com/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-rangriti-product-catalog/default/dw86f6e1d2/images/aw26/fstgm28068aw26pnk_1.jpg?sw=900&sh=1350&q=100&strip=false",
-    sizeStock: { "S": 4, "M": 5, "L": 4, "XL": 2, "XXL": 0 },
-    reviews: [],
-    isFeatured: false,
-    isNewArrival: true,
-    status: "enabled",
-    createdAt: "2026-10-12T10:00:00Z",
-    updatedAt: "2026-10-28T10:00:00Z"
-  },
-  {
-    id: "alk-012",
-    name: "Crimson Striped Kurta with Dupatta",
-    description: "Festive crimson kurta in tonal stripes with sparkle embroidery on the V-neck yoke, paired with a sheer flowing dupatta.",
-    collection: "alankritha",
-    category: "Kurtas",
-    subcategory: "Straight Fit",
-    price: 4699,
-    salePrice: 3759,
-    image: "https://www.rangriti.com/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-rangriti-product-catalog/default/dw2b492855/images/aw26/fstgm25476aw26fus_1.jpg?sw=900&sh=1350&q=100&strip=false",
-    sizeStock: { "S": 3, "M": 4, "L": 3, "XL": 2, "XXL": 0 },
-    reviews: [],
-    isFeatured: true,
-    isNewArrival: true,
-    status: "enabled",
-    createdAt: "2026-10-13T10:00:00Z",
-    updatedAt: "2026-10-28T10:00:00Z"
-  },
-  {
-    id: "alk-013",
-    name: "Navy Paisley Printed Straight Kurta",
-    description: "Navy straight kurta with a large paisley and lotus print in soft gold tones, a notched collar and side slits.",
-    collection: "alankritha",
-    category: "Kurtas",
-    subcategory: "Straight Fit",
-    price: 2999,
-    salePrice: 2399,
-    image: "https://www.rangriti.com/dw/image/v2/BKQK_PRD/on/demandware.static/-/Sites-rangriti-product-catalog/default/dw05005b15/images/aw26/rrtroz28080aw26blu_1.jpg?sw=900&sh=1350&q=100&strip=false",
-    sizeStock: { "S": 4, "M": 6, "L": 5, "XL": 3, "XXL": 0 },
-    reviews: [],
-    isFeatured: false,
-    isNewArrival: true,
-    status: "enabled",
-    createdAt: "2026-10-14T10:00:00Z",
-    updatedAt: "2026-10-28T10:00:00Z"
   },
   {
     id: "alk-014",
