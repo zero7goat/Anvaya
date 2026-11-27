@@ -60,6 +60,7 @@ export const orderService = {
     shippingCost: number;
     grandTotal: number;
     orderReference: string;
+    paymentMethod?: Order["paymentMethod"];
   }): { message: string; url: string } {
     const itemLines = params.items.map(
       (item, idx) => `${idx + 1}. *${item.name}*\n   Size: ${item.selectedSize} | Qty: ${item.quantity} | ₹${item.price.toLocaleString("en-IN")}`
@@ -85,7 +86,7 @@ ${itemLines}
 • Address: ${params.address}
 • City/State: ${params.city}, ${params.state}
 • PIN Code: ${params.pincode}
-• Payment Method: Cash on Delivery (COD)
+• Payment Method: ${params.paymentMethod === "Razorpay" ? "Paid online (Razorpay)" : "Cash on Delivery (COD)"}
 
 Please confirm my order and share estimated dispatch details. Thank you!`.trim();
 
@@ -108,6 +109,7 @@ Please confirm my order and share estimated dispatch details. Thank you!`.trim()
       shippingCost: order.shippingCost ?? 0,
       grandTotal: order.total,
       orderReference: order.reference,
+      paymentMethod: order.paymentMethod,
     }).url;
   },
 };

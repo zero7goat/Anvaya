@@ -72,8 +72,10 @@ export interface Order {
   createdAt: string; // ISO timestamp from the database
   date: string; // YYYY-MM-DD (India time)
   time: string; // HH:MM (India time)
-  paymentMethod: "COD";
-  paymentStatus: "COD - Due" | "Paid" | "Refunded";
+  paymentMethod: "COD" | "Razorpay";
+  // COD: COD - Due, Paid, Refunded. Online (Razorpay): Awaiting payment, Paid, Unpaid
+  // (cancelled without paying), Refund Pending, Refunded
+  paymentStatus: "COD - Due" | "Awaiting payment" | "Paid" | "Unpaid" | "Refund Pending" | "Refunded";
   status: "Pending" | "Confirmed" | "Shipped" | "Delivered" | "Cancelled" | "Returned";
 }
 

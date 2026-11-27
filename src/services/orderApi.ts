@@ -169,7 +169,8 @@ export function describeProblem(problem: QuoteProblem, cartName?: string): strin
 
 export const ORDER_REFERENCE = /^ANV-[0-9A-HJKMNP-TV-Z]{10}$/;
 const STATUSES: OrderStatus[] = ["Pending", "Confirmed", "Shipped", "Delivered", "Cancelled", "Returned"];
-const PAYMENT_STATUSES: PaymentStatus[] = ["COD - Due", "Paid", "Refunded"];
+const PAYMENT_STATUSES: PaymentStatus[] = ["COD - Due", "Awaiting payment", "Paid", "Unpaid", "Refund Pending", "Refunded"];
+const PAYMENT_METHODS: Order["paymentMethod"][] = ["COD", "Razorpay"];
 
 // Date and time in India, where the boutique works (the database stores UTC)
 const indiaParts = (iso: string): { date: string; time: string } | null => {
@@ -214,7 +215,7 @@ type OrderFields = {
 const buildOrder = (f: OrderFields): Order | null => {
   if (!isText(f.reference) || !ORDER_REFERENCE.test(f.reference) || !isText(f.createdAt)) return null;
   if (!STATUSES.includes(f.status as OrderStatus) || !PAYMENT_STATUSES.includes(f.paymentStatus as PaymentStatus)) return null;
-  if (f.paymentMethod !== "COD") return null;
+  if (!PAYMENT_METHODS.includes(f.paymentMethod as Order["paymentMethod"])) return null;
   const c = f.customer;
   if (![c.name, c.phone, c.address, c.city, c.state, c.pincode].every(isText)) return null;
   if (!isWhole(f.subtotal) || !isWhole(f.discount) || !isWhole(f.shipping) || !isWhole(f.total)) return null;
@@ -242,7 +243,7 @@ const buildOrder = (f: OrderFields): Order | null => {
     couponCode: isText(f.couponCode) ? f.couponCode : undefined,
     shippingCost: f.shipping,
     total: f.total,
-    paymentMethod: "COD",
+    paymentMethod: f.paymentMethod as Order["paymentMethod"],
     paymentStatus: f.paymentStatus as PaymentStatus,
     status: f.status as OrderStatus,
   };
@@ -322,7 +323,10 @@ export const nextStatuses = (status: OrderStatus): OrderStatus[] => NEXT_STATUSE
 /** The payment change an admin can make now, if any */
 export function nextPaymentStatus(order: Pick<Order, "status" | "paymentStatus">): PaymentStatus | null {
   if (order.paymentStatus === "COD - Due" && (order.status === "Shipped" || order.status === "Delivered")) return "Paid";
-  if (order.paymentStatus === "Paid" && (order.status === "Cancelled" || order.status === "Returned")) return "Refunded";
+  // Online orders: after refunding in the Razorpay Dashboard yourself
+  if ((order.paymentStatus === "Paid" || order.paymentStatus === "Refund Pending") && (order.status === "Cancelled" || order.status === "Returned")) {
+    return "Refunded";
+  }
   return null;
 }
 
@@ -449,48 +453,7 @@ export class OrderApi {
       }
       return isDatabaseAnswer(error) ? { ok: false, kind: "failed", message: FAILED_MESSAGE } : { ok: false, kind: "uncertain", message: UNCERTAIN_MESSAGE };
     }
-    if (!isObject(data) || typeof data.ok !== "boolean") return { ok: false, kind: "uncertain", message: UNCERTAIN_MESSAGE };
-
-    if (data.ok) {
-      const order = parseOrderSummary(data.order);
-      // A "saved" reply we can't read is never shown as a placed order
-      if (!order) return { ok: false, kind: "uncertain", message: UNCERTAIN_MESSAGE };
-      return { ok: true, kind: "placed", order, replayed: data.replayed === true };
-    }
-
-    switch (data.reason) {
-      case "invalid_customer": {
-        const field = CUSTOMER_FIELDS.includes(data.field as CustomerField) ? (data.field as CustomerField) : "name";
-        return { ok: false, kind: "invalid_customer", field, message: message(data, "Please check your delivery details.") };
-      }
-      case "invalid_items":
-      case "too_many_lines":
-      case "quantity_limit":
-        return { ok: false, kind: "invalid_items", message: message(data, "Some items in your bag are not valid.") };
-      case "unavailable":
-        return {
-          ok: false,
-          kind: "unavailable",
-          quote: parseQuote(data.quote),
-          message: "Some pieces in your bag aren't available in the quantity chosen, so nothing was ordered.",
-        };
-      case "price_changed": {
-        const quote = parseQuote(data.quote);
-        if (!quote) return { ok: false, kind: "failed", message: FAILED_MESSAGE };
-        return {
-          ok: false,
-          kind: "price_changed",
-          quote,
-          message: `Prices changed since you opened checkout, so nothing was ordered yet. The new total is ₹${quote.total.toLocaleString("en-IN")}; please check it and confirm again.`,
-        };
-      }
-      case "too_many_pending":
-        return { ok: false, kind: "too_many_pending", message: message(data, "There are already several orders waiting for this phone number.") };
-      case "idempotency_conflict":
-        return { ok: false, kind: "idempotency_conflict", message: message(data, "Please review your bag and try again.") };
-      default:
-        return { ok: false, kind: "failed", message: FAILED_MESSAGE };
-    }
+    return readPlaceOrderReply(data);
   }
 
   /** Every order, newest first (admins only: others get none, by Row Level Security) */
@@ -519,6 +482,55 @@ export class OrderApi {
       return { ok: false, error: "The change couldn't be confirmed. Refresh to see the order's current status." };
     }
     return { ok: true, changed: data.changed === true, status: data.status as OrderStatus, paymentStatus: data.payment_status as PaymentStatus };
+  }
+}
+
+/**
+ * Reads place_order's reply, or the same reply passed on by the online payment function
+ * (payment_place_order). Only a reply holding a readable order counts as placed.
+ */
+export function readPlaceOrderReply(data: unknown): PlaceOrderResult {
+  if (!isObject(data) || typeof data.ok !== "boolean") return { ok: false, kind: "uncertain", message: UNCERTAIN_MESSAGE };
+
+  if (data.ok) {
+    const order = parseOrderSummary(data.order);
+    // A "saved" reply we can't read is never shown as a placed order
+    if (!order) return { ok: false, kind: "uncertain", message: UNCERTAIN_MESSAGE };
+    return { ok: true, kind: "placed", order, replayed: data.replayed === true };
+  }
+
+  switch (data.reason) {
+    case "invalid_customer": {
+      const field = CUSTOMER_FIELDS.includes(data.field as CustomerField) ? (data.field as CustomerField) : "name";
+      return { ok: false, kind: "invalid_customer", field, message: message(data, "Please check your delivery details.") };
+    }
+    case "invalid_items":
+    case "too_many_lines":
+    case "quantity_limit":
+      return { ok: false, kind: "invalid_items", message: message(data, "Some items in your bag are not valid.") };
+    case "unavailable":
+      return {
+        ok: false,
+        kind: "unavailable",
+        quote: parseQuote(data.quote),
+        message: "Some pieces in your bag aren't available in the quantity chosen, so nothing was ordered.",
+      };
+    case "price_changed": {
+      const quote = parseQuote(data.quote);
+      if (!quote) return { ok: false, kind: "failed", message: FAILED_MESSAGE };
+      return {
+        ok: false,
+        kind: "price_changed",
+        quote,
+        message: `Prices changed since you opened checkout, so nothing was ordered yet. The new total is ₹${quote.total.toLocaleString("en-IN")}; please check it and confirm again.`,
+      };
+    }
+    case "too_many_pending":
+      return { ok: false, kind: "too_many_pending", message: message(data, "There are already several orders waiting for this phone number.") };
+    case "idempotency_conflict":
+      return { ok: false, kind: "idempotency_conflict", message: message(data, "Please review your bag and try again.") };
+    default:
+      return { ok: false, kind: "failed", message: FAILED_MESSAGE };
   }
 }
 

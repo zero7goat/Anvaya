@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { OVERLAY_MOTION } from "../utils/motion";
-import { X, ShoppingBag, Trash2, MessageSquare, Tag, CheckCircle, AlertCircle } from "lucide-react";
+import { X, ShoppingBag, Trash2, MessageSquare, Tag, CheckCircle, AlertCircle, Lock } from "lucide-react";
 import { CartItem, Offer } from "../types";
 import { offerService } from "../services/offerService";
 import { orderService } from "../services/orderService";
@@ -20,6 +20,8 @@ interface CartDrawerProps {
   // The applied coupon code, kept by the app across reloads; only the code is kept
   couponCode?: string;
   onCouponChange: (code: string | undefined) => void;
+  // Opens online payment checkout; without it, the bag orders on WhatsApp only
+  onCheckout?: () => void;
 }
 
 export default function CartDrawer({
@@ -30,6 +32,7 @@ export default function CartDrawer({
   onRemoveItem,
   couponCode,
   onCouponChange,
+  onCheckout,
 }: CartDrawerProps) {
   const [promoCode, setPromoCode] = useState<string>(couponCode ?? "");
   const [promoError, setPromoError] = useState<string>("");
@@ -343,21 +346,38 @@ export default function CartDrawer({
                 </div>
               </div>
 
-              {/* Orders are placed in the WhatsApp chat */}
-              <a
-                href={enquiryUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-whatsapp btn-lg btn-block"
-                id="cart-whatsapp-enquiry-btn"
-              >
-                <MessageSquare className="w-4 h-4 fill-white" aria-hidden="true" />
-                <span>Order on WhatsApp</span>
-              </a>
+              {onCheckout ? (
+                <>
+                  {/* Pay online: the main way to order once online payment is on */}
+                  <button type="button" onClick={onCheckout} className="btn btn-primary btn-lg btn-block" id="cart-checkout-btn">
+                    <Lock className="w-4 h-4" aria-hidden="true" />
+                    <span>Checkout &amp; pay online</span>
+                  </button>
+                  <p className="text-xs text-muted text-center">UPI, cards or net banking. Delivering across India.</p>
+                  <a href={enquiryUrl} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-block" id="cart-whatsapp-enquiry-btn">
+                    <MessageSquare className="w-4 h-4" aria-hidden="true" />
+                    <span>Ask on WhatsApp first</span>
+                  </a>
+                </>
+              ) : (
+                <>
+                  {/* Orders are placed in the WhatsApp chat */}
+                  <a
+                    href={enquiryUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-whatsapp btn-lg btn-block"
+                    id="cart-whatsapp-enquiry-btn"
+                  >
+                    <MessageSquare className="w-4 h-4 fill-white" aria-hidden="true" />
+                    <span>Order on WhatsApp</span>
+                  </a>
 
-              <p className="text-xs text-muted text-center">
-                Sends your bag to the boutique on WhatsApp. They will confirm availability, the final amount and payment. Delivering across India.
-              </p>
+                  <p className="text-xs text-muted text-center">
+                    Sends your bag to the boutique on WhatsApp. They will confirm availability, the final amount and payment. Delivering across India.
+                  </p>
+                </>
+              )}
             </div>
           )}
 

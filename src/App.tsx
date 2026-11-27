@@ -36,6 +36,8 @@ const CollectionPage = lazy(() => import("./components/CollectionPage"));
 const ProductPage = lazy(() => import("./components/ProductPage"));
 const QuickView = lazy(() => import("./components/QuickView"));
 const PolicyPage = lazy(() => import("./components/PolicyPage"));
+// Online payment checkout (only when BOUTIQUE_CONFIG.onlinePayment is on)
+const CheckoutModal = lazy(() => import("./components/CheckoutModal"));
 
 // The cart survives a refresh: only product IDs, sizes and quantities are kept, and
 // they are re-checked against the live catalogue (price, stock) when read back.
@@ -124,6 +126,12 @@ export default function App() {
   useEffect(() => {
     if (isLoginOpen) setLoginLoaded(true);
   }, [isLoginOpen]);
+
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [checkoutLoaded, setCheckoutLoaded] = useState(false);
+  useEffect(() => {
+    if (isCheckoutOpen) setCheckoutLoaded(true);
+  }, [isCheckoutOpen]);
 
   useEffect(() => {
     let active = true;
@@ -470,7 +478,35 @@ export default function App() {
         onRemoveItem={handleRemoveFromCart}
         couponCode={bagCouponCode}
         onCouponChange={setBagCouponCode}
+        onCheckout={
+          BOUTIQUE_CONFIG.onlinePayment.enabled
+            ? () => {
+                setIsCartOpen(false);
+                setIsCheckoutOpen(true);
+              }
+            : undefined
+        }
       />
+
+      {/* Online payment checkout, loaded the first time it is opened */}
+      <Suspense fallback={null}>
+        {checkoutLoaded && (
+          <CheckoutModal
+            isOpen={isCheckoutOpen}
+            onClose={() => setIsCheckoutOpen(false)}
+            cartItems={cart}
+            appliedPromoCode={bagCouponCode}
+            onOrderSuccess={() => {
+              // Paid: the bag and its coupon are done with
+              setCart([]);
+              setBagCouponCode(undefined);
+            }}
+            onCatalogueChanged={() => {
+              productService.loadCatalogue().then(loadStorefrontData);
+            }}
+          />
+        )}
+      </Suspense>
 
       {/* The account page loads the first time it is opened */}
       <Suspense fallback={null}>

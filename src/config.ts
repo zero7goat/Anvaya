@@ -73,5 +73,11 @@ export const BOUTIQUE_CONFIG = {
       enabled: false,
     },
   ],
+  // Online payment (Razorpay: UPI, cards, net banking) through supabase/functions. Turn on
+  // only after supabase/drafts/payments_razorpay.sql is applied and the functions are
+  // deployed with their keys; until then the bag keeps ordering on WhatsApp.
+  onlinePayment: {
+    enabled: false,
+  },
   // Hosting: static site on Cloudflare Pages; products, stock and orders live in Supabase.
 };

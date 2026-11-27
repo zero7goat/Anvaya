@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, FormEvent, useMemo } from "react";
 import {
-  X, CheckCircle2, AlertCircle, ShoppingBag, Truck,
+  X, CheckCircle2, AlertCircle, ShoppingBag, Lock,
   MessageSquare, ShieldCheck, Loader2
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -9,9 +9,13 @@ import { OVERLAY_MOTION } from "../utils/motion";
 import { BOUTIQUE_CONFIG } from "../config";
 import { orderService } from "../services/orderService";
 import {
-  orderApi, describeProblem, newIdempotencyKey, placeOrderThen, toRpcItems,
-  type PlaceOrderResult, type Quote
+  orderApi, describeProblem, newIdempotencyKey, toRpcItems,
+  type Quote
 } from "../services/orderApi";
+import {
+  paymentApi, loadRazorpayCheckout,
+  type RazorpaySuccess, type StartPaymentResult
+} from "../services/paymentApi";
 import ProductImage from "./ProductImage";
 import { getProductImage } from "../data/imageRegistry";
 import { useOverlay } from "../hooks/useOverlay";
@@ -33,14 +37,25 @@ interface CheckoutModalProps {
   cartItems: CartItem[];
   // Coupon chosen in the bag; the database decides whether it applies
   appliedPromoCode?: string;
-  // Called only after the database has saved the order
+  // Called only after the payment is confirmed and the database has the order as paid
   onOrderSuccess: (order: Order) => void;
-  onOpenInbox: () => void;
+  onOpenInbox?: () => void;
   // Called when stock changed underneath the shopper, so the storefront can refresh
   onCatalogueChanged?: () => void;
 }
 
 const formatINR = (amount: number) => `₹${amount.toLocaleString("en-IN")}`;
+
+// Razorpay Checkout shows only UPI, cards and net banking (no wallets, EMI or pay later)
+const PAYMENT_METHODS_SHOWN = {
+  display: {
+    blocks: {
+      pay: { name: "Pay with", instruments: [{ method: "upi" }, { method: "card" }, { method: "netbanking" }] },
+    },
+    sequence: ["block.pay"],
+    preferences: { show_default_blocks: false },
+  },
+};
 
 export default function CheckoutModal({
   isOpen,
@@ -75,6 +90,8 @@ export default function CheckoutModal({
   // Field that failed validation: highlighted, described by the message, and focused
   const [invalidField, setInvalidField] = useState<CheckoutField | null>(null);
   const [successOrder, setSuccessOrder] = useState<Order | null>(null);
+  // Shown while the server confirms a payment Razorpay reported as successful
+  const [paymentNote, setPaymentNote] = useState("");
   const [quoteState, setQuoteState] = useState<QuoteState>({ status: "loading" });
   const quoteRequest = useRef(0);
 
@@ -163,7 +180,7 @@ export default function CheckoutModal({
   };
 
   // Explain why nothing was placed. The bag is always kept.
-  const showFailure = (result: PlaceOrderResult) => {
+  const showFailure = (result: Exclude<StartPaymentResult, { kind: "checkout" | "already_paid" }>) => {
     switch (result.kind) {
       case "invalid_customer":
         failValidation(result.field, result.message);
@@ -182,15 +199,37 @@ export default function CheckoutModal({
       case "failed":
       case "uncertain":
       case "too_many_pending":
+      case "payment_unavailable":
         setOfferHelp(true);
         break;
     }
     setErrorMsg(result.message ?? "");
   };
 
-  // Place the COD order. Only once the database confirms it is the success screen shown,
-  // and only then (when asked) is WhatsApp opened with the saved order.
-  const placeOrder = async (sendOnWhatsApp: boolean) => {
+  // Paid and confirmed by the server: show the confirmation, and the bag is done with
+  const finishPaid = (order: Order) => {
+    checkoutKeyRef.current = null;
+    setErrorMsg("");
+    setSuccessOrder(order);
+    onOrderSuccess(order);
+  };
+
+  // Checkout's success reply goes to the server, which checks its signature before the
+  // order counts as paid. The webhook records the payment too if this doesn't get through.
+  const confirmPayment = async (order: Order, success: RazorpaySuccess) => {
+    setPaymentNote("Confirming your payment…");
+    try {
+      const result = await paymentApi.verify(order.reference, success);
+      if (result.ok) finishPaid(result.order);
+      else setErrorMsg(result.message);
+    } finally {
+      setPaymentNote("");
+    }
+  };
+
+  // Save the order (its pieces are held for the shopper), then pay for it in Razorpay
+  // Checkout. Pressing Pay again after closing the payment window reuses the same order.
+  const payOnline = async () => {
     if (submittingRef.current) return;
     setErrorMsg("");
     setOfferHelp(false);
@@ -211,9 +250,8 @@ export default function CheckoutModal({
     checkoutKeyRef.current ??= newIdempotencyKey();
     const email = customerEmail.trim();
     try {
-      const result = await placeOrderThen(
-        orderApi,
-        {
+      const [started, Razorpay] = await Promise.all([
+        paymentApi.start({
           idempotencyKey: checkoutKeyRef.current,
           cart: cartItems,
           customer: {
@@ -227,18 +265,56 @@ export default function CheckoutModal({
           },
           couponCode: appliedPromoCode,
           expectedTotal: quoteState.quote.total,
-        },
-        (order) => {
-          checkoutKeyRef.current = null;
-          setSuccessOrder(order);
-          onOrderSuccess(order);
-          // May be blocked by the browser; the success screen has the same link
-          if (sendOnWhatsApp) window.open(orderService.whatsAppUrlForOrder(order), "_blank", "noopener,noreferrer");
-        }
-      );
-      if (!result.ok) showFailure(result);
+        }),
+        loadRazorpayCheckout(),
+      ]);
+      if (started.kind !== "checkout") {
+        if (started.kind === "already_paid") finishPaid(started.order);
+        else showFailure(started);
+        return;
+      }
+      const { order, checkout } = started;
+      if (!Razorpay) {
+        setErrorMsg(
+          `Your order ${order.reference} is saved, but the payment window couldn't load. Check your connection and press Pay again; you won't get a second order.`
+        );
+        return;
+      }
+
+      // Wait while the payment window is open; the button stays busy until it closes
+      await new Promise<void>((done) => {
+        const razorpay = new Razorpay({
+          key: checkout.keyId,
+          amount: checkout.amount,
+          currency: checkout.currency,
+          order_id: checkout.razorpayOrderId,
+          name: BOUTIQUE_CONFIG.brandName,
+          description: `Order ${order.reference}`,
+          prefill: { name: order.customerName, contact: order.customerPhone, ...(order.customerEmail ? { email: order.customerEmail } : {}) },
+          notes: { reference: order.reference },
+          theme: { color: "#3D0A0E" },
+          config: PAYMENT_METHODS_SHOWN,
+          handler: (success: RazorpaySuccess) => {
+            void confirmPayment(order, success).finally(done);
+          },
+          modal: {
+            ondismiss: () => {
+              setErrorMsg(
+                `Payment not completed. Your order ${order.reference} is saved and its pieces are held for you; press Pay again to finish paying.`
+              );
+              done();
+            },
+          },
+        });
+        // A failed attempt: the window stays open so the shopper can try another way
+        razorpay.on("payment.failed", (response) => {
+          const reason = response.error?.description;
+          setErrorMsg(`Payment failed${reason ? `: ${reason}` : ""}. You can try again in the payment window.`);
+        });
+        razorpay.open();
+      });
     } catch {
-      setErrorMsg("We couldn't confirm your order. Please try again: if it was saved, you'll get the same order, not a second one.");
+      setErrorMsg("We couldn't start the payment. Please try again: if your order was saved, you'll get the same order, not a second one.");
       setOfferHelp(true);
     } finally {
       submittingRef.current = false;
@@ -246,9 +322,9 @@ export default function CheckoutModal({
     }
   };
 
-  const handleConfirmCodOrder = (e: FormEvent) => {
+  const handlePay = (e: FormEvent) => {
     e.preventDefault();
-    void placeOrder(false);
+    void payOnline();
   };
 
   // WhatsApp link with the saved order's reference and the database's figures
@@ -293,13 +369,13 @@ export default function CheckoutModal({
 
             <div>
               <span className="eyebrow block">
-                Cash on Delivery order
+                Paid online
               </span>
               <h3 className="heading-title mt-1">
                 Dhanyawaad, {successOrder.customerName}!
               </h3>
               <p className="text-sm text-muted mt-2">
-                Your order <strong className="tabular-nums text-ink">#{successOrder.reference}</strong> is placed and saved with the boutique. Please keep this reference.
+                Your payment is received and order <strong className="tabular-nums text-ink">#{successOrder.reference}</strong> is placed with the boutique. Please keep this reference.
               </p>
             </div>
 
@@ -326,7 +402,7 @@ export default function CheckoutModal({
                 <span className="tabular-nums">{successOrder.shippingCost ? formatINR(successOrder.shippingCost) : "Free"}</span>
               </div>
               <div className="flex justify-between font-semibold text-ink border-t border-line pt-2">
-                <span>Total Amount Due on Delivery:</span>
+                <span>Total Paid:</span>
                 <span className="price">{formatINR(successOrder.total)}</span>
               </div>
               <div className="text-xs text-muted">
@@ -352,12 +428,14 @@ export default function CheckoutModal({
                 Optional: the boutique already has your order. Sending it on WhatsApp helps the team confirm it sooner. If you close WhatsApp without sending, your order is still placed; you don't need to order again.
               </p>
 
-              <button
-                onClick={onOpenInbox}
-                className="btn btn-secondary btn-block"
-              >
-                View your orders
-              </button>
+              {onOpenInbox && (
+                <button
+                  onClick={onOpenInbox}
+                  className="btn btn-secondary btn-block"
+                >
+                  View your orders
+                </button>
+              )}
               <button
                 onClick={onClose}
                 className="btn btn-ghost btn-block"
@@ -373,7 +451,7 @@ export default function CheckoutModal({
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain grid grid-cols-1 lg:grid-cols-12">
 
             {/* Left Column: Delivery Details Form (7 cols) */}
-            <form onSubmit={handleConfirmCodOrder} noValidate className="lg:col-span-7 p-4 min-[400px]:p-6 sm:p-8 space-y-4 border-b lg:border-b-0 lg:border-r border-line">
+            <form onSubmit={handlePay} noValidate className="lg:col-span-7 p-4 min-[400px]:p-6 sm:p-8 space-y-4 border-b lg:border-b-0 lg:border-r border-line">
 
               <div>
                 <h3 className="heading-label mb-1">
@@ -543,7 +621,7 @@ export default function CheckoutModal({
                 </div>
               </div>
 
-              {/* Payment Method (Cash on Delivery is the only one) */}
+              {/* Payment Method (online payment through Razorpay is the only one) */}
               <div className="pt-2">
                 <h3 className="heading-label mb-2">
                   2. Payment Method
@@ -553,14 +631,14 @@ export default function CheckoutModal({
                     <div className="w-4 h-4 rounded-full border-4 border-maroon-800 bg-white"></div>
                     <div>
                       <div className="text-sm font-semibold text-ink">
-                        Cash on Delivery (COD)
+                        Pay online
                       </div>
                       <div className="text-xs text-muted">
-                        Pay in cash or UPI when your outfit arrives at your doorstep.
+                        UPI, debit or credit card, or net banking, in Razorpay's secure payment window.
                       </div>
                     </div>
                   </div>
-                  <Truck className="w-4 h-4 text-maroon-800" />
+                  <Lock className="w-4 h-4 text-maroon-800" />
                 </div>
               </div>
 
@@ -571,7 +649,6 @@ export default function CheckoutModal({
                   <span className="price text-base">{quote && quoteState.status === "ready" ? formatINR(quote.total) : "—"}</span>
                 </div>
 
-                {/* 1. PLACE ORDER (COD) */}
                 <button
                   type="submit"
                   disabled={!canOrder}
@@ -579,25 +656,17 @@ export default function CheckoutModal({
                   className="btn btn-primary btn-lg btn-block"
                 >
                   {isProcessing ? (
-                    <span>Placing your order…</span>
+                    <span>{paymentNote || "Waiting for payment…"}</span>
                   ) : (
-                    <span>Confirm Cash on Delivery Order</span>
+                    <>
+                      <Lock className="w-4 h-4" aria-hidden="true" />
+                      <span>Pay {quote && quoteState.status === "ready" ? formatINR(quote.total) : ""} securely</span>
+                    </>
                   )}
                 </button>
 
-                {/* 2. PLACE ORDER, THEN SEND IT ON WHATSAPP */}
-                <button
-                  type="button"
-                  onClick={() => void placeOrder(true)}
-                  disabled={!canOrder}
-                  className="btn btn-whatsapp btn-lg btn-block"
-                >
-                  <MessageSquare className="w-4 h-4 fill-white" />
-                  <span>Place order &amp; send on WhatsApp</span>
-                </button>
-
                 <p className="text-xs text-muted text-center">
-                  Your order is saved with the boutique first. WhatsApp opens only after it is saved.
+                  Your order is saved and its pieces are held for you when the payment window opens. It is confirmed once paid.
                 </p>
               </div>
 
@@ -726,7 +795,7 @@ export default function CheckoutModal({
                   <span>Direct from the boutique</span>
                 </div>
                 <p>
-                  Free shipping. Pay by cash or UPI on delivery.
+                  Free shipping. Secure payment by Razorpay: UPI, cards or net banking.
                 </p>
               </div>
 

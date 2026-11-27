@@ -122,6 +122,8 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const pendingRef = useRef(new Set<string>());
   const [notice, setNotice] = useState<{ kind: "success" | "warning" | "error"; text: string } | null>(null);
+  // A final order change (Cancelled / Returned) waiting for "Yes" on the page
+  const [confirmingOrderChange, setConfirmingOrderChange] = useState<{ order: Order; status: OrderStatus } | null>(null);
 
   // Order Details Modal / View (by id, so it always shows the latest copy read from the database)
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -547,14 +549,15 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
   // Change an order's status or payment through admin_update_order_status. The database
   // checks the admin and the allowed changes; the list is then read again, so what is
   // shown is what was saved.
-  const handleChangeOrder = async (order: Order, change: { status?: OrderStatus; paymentStatus?: PaymentStatus }) => {
+  // Cancelled and Returned are final, so they are confirmed on the page first (not with a
+  // browser pop-up: browsers that block pop-ups answer it as Cancel, silently)
+  const handleChangeOrder = async (order: Order, change: { status?: OrderStatus; paymentStatus?: PaymentStatus }, confirmed = false) => {
     if (orderBusyRef.current) return;
-    if (
-      (change.status === "Cancelled" || change.status === "Returned") &&
-      !window.confirm(`Mark order ${order.reference} as ${change.status}? Its pieces go back into stock, and this can't be undone.`)
-    ) {
+    if ((change.status === "Cancelled" || change.status === "Returned") && !confirmed) {
+      setConfirmingOrderChange({ order, status: change.status });
       return;
     }
+    setConfirmingOrderChange(null);
     orderBusyRef.current = true;
     setOrderBusy(order.id);
     try {
@@ -1385,6 +1388,13 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
         {/* ========================================================================= */}
         {activeTab === "orders" && (
           <div className="space-y-6">
+            {confirmingOrderChange && !selectedOrder && (
+              <OrderChangeConfirm
+                change={confirmingOrderChange}
+                onKeep={() => setConfirmingOrderChange(null)}
+                onConfirm={() => void handleChangeOrder(confirmingOrderChange.order, { status: confirmingOrderChange.status }, true)}
+              />
+            )}
             <div className="panel p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="heading-card">
@@ -1884,7 +1894,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                   Order #{selectedOrder.reference}
                 </h3>
                 <p className="text-xs text-neutral-500">
-                  {selectedOrder.date} at {selectedOrder.time} IST · Cash on Delivery · {selectedOrder.paymentStatus}
+                  {selectedOrder.date} at {selectedOrder.time} IST · {selectedOrder.paymentMethod === "Razorpay" ? "Paid online (Razorpay)" : "Cash on Delivery"} · {selectedOrder.paymentStatus}
                 </p>
               </div>
               <button
@@ -1942,7 +1952,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                     <dd className="tabular-nums">{selectedOrder.shippingCost ? `₹${selectedOrder.shippingCost.toLocaleString("en-IN")}` : "Free"}</dd>
                   </div>
                   <div className="flex justify-between font-semibold text-ink pt-1">
-                    <dt>Total Amount (COD):</dt>
+                    <dt>Total Amount ({selectedOrder.paymentMethod === "Razorpay" ? "online" : "COD"}):</dt>
                     <dd className="tabular-nums">₹{selectedOrder.total.toLocaleString("en-IN")}</dd>
                   </div>
                 </dl>
@@ -1950,6 +1960,13 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
 
               {/* Fulfillment status and payment (only the changes the database allows) */}
               <div className="space-y-3">
+                {confirmingOrderChange?.order.id === selectedOrder.id && (
+                  <OrderChangeConfirm
+                    change={confirmingOrderChange}
+                    onKeep={() => setConfirmingOrderChange(null)}
+                    onConfirm={() => void handleChangeOrder(confirmingOrderChange.order, { status: confirmingOrderChange.status }, true)}
+                  />
+                )}
                 <div>
                   <span className="field-label">Fulfillment Status</span>
                   <OrderStatusControl
@@ -2038,6 +2055,37 @@ function OrdersLoadNote({
     return <p className={`text-center text-xs text-muted ${className}`}>No orders yet. Orders placed on the website appear here.</p>;
   }
   return null;
+}
+
+/** "Cancel / return this order?" asked on the page, with Keep and Yes */
+function OrderChangeConfirm({
+  change,
+  onKeep,
+  onConfirm,
+}: {
+  change: { order: Order; status: OrderStatus };
+  onKeep: () => void;
+  onConfirm: () => void;
+}) {
+  const { order, status } = change;
+  const paidOnline = order.paymentMethod === "Razorpay" && order.paymentStatus === "Paid";
+  // Asked where the admin can see it, even when the order row is further down the page
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [order.id, status]);
+  return (
+    <div ref={ref} className="status-note status-note-danger" role="alert" id="admin-order-change-confirm">
+      <span className="flex-1">
+        Mark order {order.reference} as {status}? Its pieces go back into stock, and this can't be undone.
+        {paidOnline && status === "Cancelled" && " It was paid online, so refund it in the Razorpay Dashboard afterwards."}
+      </span>
+      <button type="button" onClick={onKeep} className="btn btn-secondary btn-sm">Keep</button>
+      <button type="button" onClick={onConfirm} className="btn btn-primary btn-sm">
+        Yes, mark {status}
+      </button>
+    </div>
+  );
 }
 
 /**

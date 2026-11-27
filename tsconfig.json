@@ -22,5 +22,7 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  // Edge Functions run on Deno (Supabase), not in the browser bundle
+  "exclude": ["node_modules", "dist", "supabase/functions"]
 }
