@@ -11,10 +11,12 @@ import CollectionSpotlight from "./home/CollectionSpotlight";
 import ShopByStyle from "./home/ShopByStyle";
 import CustomerReviews from "./home/CustomerReviews";
 import BrandStory from "./home/BrandStory";
+import HowToOrder from "./home/HowToOrder";
 import { SITE_IMAGES, HeroSlide, getProductImage } from "../data/imageRegistry";
 import { IMAGE_WIDTHS, imageAtWidth, responsiveImage } from "../utils/imageSources";
 import { BackgroundMotif } from "./decor/Motifs";
 import MobileHero from "./home/MobileHero";
+import Reveal from "./Reveal";
 import { useIsMobile } from "../hooks/useIsMobile";
 
 
@@ -54,6 +56,8 @@ const frameSlides = (frame: HeroFrame) => (frame.kind === "banner" ? [frame.slid
 function HeroImage({ slide, priority = false }: { slide: HeroSlide; priority?: boolean }) {
   const { src, srcSet } = heroSources(slide);
   return (
+    // The wrapper drifts slowly closer while the slide is shown (images themselves never scale)
+    <div className="absolute inset-0 hero-drift">
     <img
       src={src}
       srcSet={srcSet}
@@ -67,6 +71,7 @@ function HeroImage({ slide, priority = false }: { slide: HeroSlide; priority?: b
       style={{ objectPosition: slide.position }}
       className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none block"
     />
+    </div>
   );
 }
 
@@ -150,6 +155,8 @@ export default function Hero({
 
   return (
     <div className="w-full bg-canvas flex flex-col font-sans" id="anvaya-homepage-sections">
+      {/* The page's main heading, for search engines and screen readers (the banners carry the visual one) */}
+      <h1 className="sr-only">{BOUTIQUE_CONFIG.brandName}: handcrafted Indian ethnic wear, kurtas and sarees</h1>
       
       {/* ------------------------------------------------------------- */}
       {/* SECTION 1: HERO CAROUSEL (full-bleed, header overlaid); phones get the portrait version */}
@@ -194,7 +201,18 @@ export default function Hero({
               aria-label={`${currentSlide + 1} of ${HERO_FRAMES.length}`}
             >
               {activeFrame.kind === "banner" ? (
-                <HeroImage slide={activeFrame.slide} priority={currentSlide === 0} />
+                <>
+                  <HeroImage slide={activeFrame.slide} priority={currentSlide === 0} />
+                  {activeFrame.slide.caption && (
+                    <div className="absolute inset-0 flex items-end bg-gradient-to-t from-maroon-950/70 via-maroon-950/10 to-transparent">
+                      <div className="hero-caption container-page pb-14 sm:pb-20 text-white max-w-2xl">
+                        {activeFrame.slide.caption.eyebrow && <p className="eyebrow !text-gold-300">{activeFrame.slide.caption.eyebrow}</p>}
+                        <h2 className="font-serif text-3xl sm:text-5xl leading-tight mt-2">{activeFrame.slide.caption.title}</h2>
+                        {activeFrame.slide.caption.text && <p className="mt-3 text-sm sm:text-base text-white/85">{activeFrame.slide.caption.text}</p>}
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : (
                 <>
                   {/* Portrait photos side by side; each already carries its own caption */}
@@ -215,23 +233,24 @@ export default function Hero({
           </MotionConfig>
         </div>
 
-        {/* Slide indicators */}
+        {/* Slide indicators: the current one fills while its slide is shown */}
         <div
-          className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 sm:gap-2 z-20"
+          className={`absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 sm:gap-2 z-20 ${isPaused ? "hero-paused" : ""}`}
           id="hero-carousel-dots"
+          style={{ "--hero-autoplay": `${HERO_AUTOPLAY_MS}ms` } as React.CSSProperties}
         >
           {HERO_FRAMES.map((frame, idx) => (
             <button
               key={frame.id}
               onClick={() => goToSlide(idx, idx >= currentSlide ? 1 : -1)}
-              className={`transition-all duration-500 cursor-pointer ${
-                currentSlide === idx
-                  ? "w-8 sm:w-10 h-1 bg-white rounded-full"
-                  : "w-1.5 h-1.5 bg-white/70 hover:bg-white rounded-full"
+              className={`relative overflow-hidden transition-all duration-500 cursor-pointer rounded-full ${
+                currentSlide === idx ? "w-8 sm:w-10 h-1 bg-white/40" : "w-1.5 h-1.5 bg-white/70 hover:bg-white"
               }`}
               aria-label={`Go to slide ${idx + 1}`}
               aria-current={currentSlide === idx}
-            />
+            >
+              {currentSlide === idx && <span key={currentSlide} className="hero-progress absolute inset-0 bg-white rounded-full" aria-hidden="true" />}
+            </button>
           ))}
         </div>
       </section>
@@ -248,18 +267,30 @@ export default function Hero({
         <div className="relative container-page">
           
           {/* Section Heading: Centered uppercase serif matching wireframe */}
-          <p className="eyebrow text-center mb-2">Shop by collection</p>
-          <h2 className="heading-section text-center mb-10 sm:mb-12 select-none">
-            OUR COLLECTIONS
-          </h2>
+          <Reveal>
+            <p className="eyebrow text-center mb-2">Shop by collection</p>
+            <h2 className="heading-section text-center select-none">
+              OUR COLLECTIONS
+            </h2>
+            <span className="section-rule mx-auto mb-10 sm:mb-12" aria-hidden="true" />
+          </Reveal>
 
           {/* 2 Arched Cards Side-by-Side: Alankritha & Ayanaa */}
           <div className="grid grid-cols-2 gap-4 sm:gap-8 md:gap-14 max-w-2xl sm:max-w-3xl mx-auto">
             
             {/* Card 1: ALANKRITHA (Kurtas) with Jharokha Arch Shape */}
+            <Reveal delay={0.05}>
             <div
               onClick={() => handleCollectionNav("alankritha")}
-              className="group cursor-pointer flex flex-col items-center select-none"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleCollectionNav("alankritha");
+                }
+              }}
+              role="link"
+              tabIndex={0}
+              className="group cursor-pointer flex flex-col items-center select-none outline-none"
               id="arch-card-alankritha"
               title="Explore Alankritha - Exclusively Women's Kurtas"
             >
@@ -290,6 +321,15 @@ export default function Hero({
                     d="M 150,2 C 145,10 132,18 116,26 C 62,44 0,92 0,156 L 0,384 Q 0,400 16,400 L 284,400 Q 300,400 300,384 L 300,156 C 300,92 238,44 184,26 C 168,18 155,10 150,2 Z"
                     fill="rgba(30, 5, 8, 0.25)"
                   />
+
+                  {/* Gold outline that draws in on hover */}
+                  <path
+                    d="M 150,2 C 145,10 132,18 116,26 C 62,44 0,92 0,156 L 0,384 Q 0,400 16,400 L 284,400 Q 300,400 300,384 L 300,156 C 300,92 238,44 184,26 C 168,18 155,10 150,2 Z"
+                    fill="none"
+                    stroke="#C9A45C"
+                    strokeWidth="3"
+                    className="arch-outline"
+                  />
                 </svg>
               </div>
 
@@ -302,16 +342,26 @@ export default function Hero({
                   Women's Kurtas
                 </span>
                 <span className="mt-2 inline-flex items-center gap-1 text-xs text-muted group-hover:text-ink transition-colors">
-                  {collectionCounts.alankritha} pieces
+                  {collectionCounts.alankritha} {collectionCounts.alankritha === 1 ? "piece" : "pieces"}
                   <ArrowRight className="w-3 h-3 transition-transform duration-300 group-hover:translate-x-0.5" aria-hidden="true" />
                 </span>
               </div>
             </div>
+            </Reveal>
 
             {/* Card 2: AYANAA (Sarees) with Jharokha Arch Shape */}
+            <Reveal delay={0.18}>
             <div
               onClick={() => handleCollectionNav("ayanaa")}
-              className="group cursor-pointer flex flex-col items-center select-none"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleCollectionNav("ayanaa");
+                }
+              }}
+              role="link"
+              tabIndex={0}
+              className="group cursor-pointer flex flex-col items-center select-none outline-none"
               id="arch-card-ayanaa"
               title="Explore Ayanaa - Exclusively Women's Sarees"
             >
@@ -341,6 +391,15 @@ export default function Hero({
                     d="M 150,2 C 145,10 132,18 116,26 C 62,44 0,92 0,156 L 0,384 Q 0,400 16,400 L 284,400 Q 300,400 300,384 L 300,156 C 300,92 238,44 184,26 C 168,18 155,10 150,2 Z"
                     fill="rgba(30, 5, 8, 0.25)"
                   />
+
+                  {/* Gold outline that draws in on hover */}
+                  <path
+                    d="M 150,2 C 145,10 132,18 116,26 C 62,44 0,92 0,156 L 0,384 Q 0,400 16,400 L 284,400 Q 300,400 300,384 L 300,156 C 300,92 238,44 184,26 C 168,18 155,10 150,2 Z"
+                    fill="none"
+                    stroke="#C9A45C"
+                    strokeWidth="3"
+                    className="arch-outline"
+                  />
                 </svg>
               </div>
 
@@ -353,39 +412,56 @@ export default function Hero({
                   Women's Sarees
                 </span>
                 <span className="mt-2 inline-flex items-center gap-1 text-xs text-muted group-hover:text-ink transition-colors">
-                  {collectionCounts.ayanaa} pieces
+                  {collectionCounts.ayanaa} {collectionCounts.ayanaa === 1 ? "piece" : "pieces"}
                   <ArrowRight className="w-3 h-3 transition-transform duration-300 group-hover:translate-x-0.5" aria-hidden="true" />
                 </span>
               </div>
             </div>
+            </Reveal>
 
           </div>
         </div>
       </section>
 
       {/* Collection spotlights, product edit, styles, reviews and brand story */}
-      <ProductRail onProductClick={onProductClick} onQuickView={onQuickView} onViewAll={onSelectCategory} />
+      <Reveal>
+        <ProductRail onProductClick={onProductClick} onQuickView={onQuickView} onViewAll={onSelectCategory} />
+      </Reveal>
 
-      <CollectionSpotlight
-        collectionKey="alankritha"
-        onNavigateCollection={handleCollectionNav}
-        onProductClick={onProductClick}
-        onQuickView={onQuickView}
-      />
+      <Reveal>
+        <CollectionSpotlight
+          collectionKey="alankritha"
+          onNavigateCollection={handleCollectionNav}
+          onProductClick={onProductClick}
+          onQuickView={onQuickView}
+        />
+      </Reveal>
 
-      {onNavigateCollectionStyle && <ShopByStyle onNavigateCollectionStyle={onNavigateCollectionStyle} />}
+      {onNavigateCollectionStyle && (
+        <Reveal>
+          <ShopByStyle onNavigateCollectionStyle={onNavigateCollectionStyle} />
+        </Reveal>
+      )}
 
-      <CollectionSpotlight
-        collectionKey="ayanaa"
-        reverse
-        onNavigateCollection={handleCollectionNav}
-        onProductClick={onProductClick}
-        onQuickView={onQuickView}
-      />
+      <Reveal>
+        <CollectionSpotlight
+          collectionKey="ayanaa"
+          reverse
+          onNavigateCollection={handleCollectionNav}
+          onProductClick={onProductClick}
+          onQuickView={onQuickView}
+        />
+      </Reveal>
 
-      <CustomerReviews onProductClick={onProductClick} />
+      <HowToOrder />
 
-      <BrandStory onNavigateCollection={handleCollectionNav} />
+      <Reveal>
+        <CustomerReviews onProductClick={onProductClick} />
+      </Reveal>
+
+      <Reveal>
+        <BrandStory onNavigateCollection={handleCollectionNav} />
+      </Reveal>
 
     </div>
   );
@@ -438,14 +514,17 @@ function ArchCover({ src, clipId }: { src: string; clipId: string }) {
     <>
       <rect ref={sentinelRef} width="300" height="400" fill="none" />
       {near && (
-        <image
-          href={imageAtWidth(src, 600)}
-          width="300"
-          height="400"
-          preserveAspectRatio="xMidYMid slice"
-          clipPath={"url(#" + clipId + ")"}
-          onError={() => setFailed(true)}
-        />
+        <g clipPath={"url(#" + clipId + ")"}>
+          <g className="arch-zoom">
+            <image
+              href={imageAtWidth(src, 600)}
+              width="300"
+              height="400"
+              preserveAspectRatio="xMidYMid slice"
+              onError={() => setFailed(true)}
+            />
+          </g>
+        </g>
       )}
     </>
   );

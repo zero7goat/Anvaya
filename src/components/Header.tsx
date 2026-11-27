@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { MOTION_TRANSITION } from "../utils/motion";
 import { Search, ShoppingCart, User, Menu } from "lucide-react";
 import { BOUTIQUE_CONFIG } from "../config";
 import { CollectionType, Product } from "../types";
@@ -26,6 +28,14 @@ interface HeaderProps {
   onQuickView?: (product: Product) => void;
 }
 
+// The top strip takes turns showing the shop's service terms (all from BOUTIQUE_CONFIG)
+const ANNOUNCEMENTS = [
+  "Handcrafted Kurtas & Sarees",
+  "Free shipping across India",
+  BOUTIQUE_CONFIG.onlinePayment.enabled ? "Pay securely online: UPI, cards, net banking" : "Order easily on WhatsApp",
+];
+const ANNOUNCEMENT_MS = 4500;
+
 export default function Header({
   currentCategory,
   setCategory,
@@ -48,6 +58,20 @@ export default function Header({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [announcement, setAnnouncement] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setAnnouncement((i) => (i + 1) % ANNOUNCEMENTS.length), ANNOUNCEMENT_MS);
+    return () => clearInterval(timer);
+  }, []);
+
+  // The bag count bounces when something is added
+  const [bagBump, setBagBump] = useState(0);
+  const previousCount = useRef(cartCount);
+  useEffect(() => {
+    if (cartCount > previousCount.current) setBagBump((n) => n + 1);
+    previousCount.current = cartCount;
+  }, [cartCount]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -86,12 +110,21 @@ export default function Header({
         className="w-full bg-gold-300 text-maroon-950 py-1 px-4 text-center tracking-[0.2em] uppercase font-semibold text-2xs sm:text-xs flex items-center justify-center select-none"
         id="top-announcement-strip"
       >
-        <span>
-          Handcrafted Kurtas &amp; Sarees
-          <span className="hidden sm:inline">
-            {" "}· Free Shipping
-          </span>
+        {/* One message at a time, fading up into place (all are read once by screen readers) */}
+        <span className="relative h-4 sm:h-[1.15rem] w-full overflow-hidden" aria-hidden="true">
+          <AnimatePresence initial={false}>
+            <motion.span
+              key={announcement}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0, transition: MOTION_TRANSITION.base }}
+              exit={{ opacity: 0, y: -10, transition: MOTION_TRANSITION.fast }}
+              className="absolute inset-0 flex items-center justify-center whitespace-nowrap"
+            >
+              {ANNOUNCEMENTS[announcement]}
+            </motion.span>
+          </AnimatePresence>
         </span>
+        <span className="sr-only">{ANNOUNCEMENTS.join(". ")}</span>
       </div>
 
       {/* 2. MAIN NAVIGATION BAR: Exact match to reference screenshot */}
@@ -103,7 +136,7 @@ export default function Header({
         }`}
       >
         <div className="container-page">
-          <div className="flex items-center justify-between h-14 sm:h-16">
+          <div className={`flex items-center justify-between transition-[height] duration-500 ${isScrolled ? "h-12 sm:h-14" : "h-14 sm:h-16"}`}>
             
             {/* Left Zone: Hamburger Menu & ANVAYA Logo (Emblem + Wordmark) */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
@@ -128,7 +161,7 @@ export default function Header({
                 <img
                   src="/images/logo-144.png" width={159} height={144}
                   alt="ANVAYA Motif"
-                  className="h-7 sm:h-8 md:h-9 w-auto object-contain brightness-105"
+                  className={`w-auto object-contain brightness-105 transition-[height] duration-500 ${isScrolled ? "h-6 sm:h-7 md:h-8" : "h-7 sm:h-8 md:h-9"}`}
                   loading="eager"
                   decoding="async"
                 />
@@ -166,7 +199,10 @@ export default function Header({
               >
                 <ShoppingCart className="w-5 h-5 stroke-[1.8]" />
                 {cartCount > 0 && (
-                  <span className="absolute top-0.5 right-0 min-w-4 h-4 px-1 rounded-full bg-gold-500 text-maroon-950 text-2xs font-bold flex items-center justify-center leading-none">
+                  <span
+                    key={bagBump}
+                    className={`absolute top-0.5 right-0 min-w-4 h-4 px-1 rounded-full bg-gold-500 text-maroon-950 text-2xs font-bold flex items-center justify-center leading-none ${bagBump ? "bag-bump" : ""}`}
+                  >
                     {cartCount}
                   </span>
                 )}

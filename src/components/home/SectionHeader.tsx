@@ -22,6 +22,7 @@ export default function SectionHeader({
         <h2 id={id} className="heading-section">
           {title}
         </h2>
+        <span className="section-rule" aria-hidden="true" />
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </div>

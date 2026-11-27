@@ -1,10 +1,15 @@
-import { ReactNode, useEffect } from "react";
+import { Fragment, ReactNode, useEffect } from "react";
 import { BOUTIQUE_CONFIG } from "../config";
 import { POLICY_LINKS, type PolicyView } from "../utils/routes";
 import { FloralSprig } from "./decor/Motifs";
 import { DomeBorder } from "./AuthFormParts";
+import Reveal from "./Reveal";
+import { smoothScroll } from "../utils/smoothScroll";
 
-const LAST_UPDATED = "1 November 2026";
+const LAST_UPDATED = "27 November 2026";
+
+// Anchor id for a section heading, e.g. "Delivery, cancellation and returns" -> "delivery-cancellation-and-returns"
+const sectionId = (heading: string) => heading.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 const { brandName, supportEmail, supportPhone, supportHours, storeLocation, whatsappNumber, anvayaOwner, alankrithaOwner } = BOUTIQUE_CONFIG;
 
@@ -29,10 +34,16 @@ const POLICIES: Record<PolicyView, { title: string; intro: string; sections: Sec
       {
         heading: "Ordering and payment",
         body: (
-          <p>
-            Orders are placed by enquiry on <WhatsAppLink />. We confirm availability and the final amount in the chat, then
-            share how to pay. Your order is confirmed once payment is received. Cash on Delivery is not available at the moment.
-          </p>
+          <>
+            <p>
+              Pay online at checkout with UPI, a debit or credit card, or net banking. Payments are processed securely by
+              Razorpay, and your order is confirmed once payment is received.
+            </p>
+            <p>
+              You can also send your bag to us on <WhatsAppLink />. We confirm availability and the final amount in the chat,
+              then share how to pay. Cash on Delivery is not available at the moment.
+            </p>
+          </>
         ),
       },
       {
@@ -49,14 +60,19 @@ const POLICIES: Record<PolicyView, { title: string; intro: string; sections: Sec
         body: (
           <p>
             You can cancel an order only before it is dispatched, by messaging us on <WhatsAppLink /> or emailing <EmailLink />.
-            Once dispatched, an order can't be cancelled. If you have already paid, the amount stays with us as credit for a
-            future order.
+            Once dispatched, an order can't be cancelled. If you have already paid and cancel before dispatch, we refund the
+            amount paid.
           </p>
         ),
       },
       {
         heading: "Refunds",
-        body: <p>We do not offer refunds. If we can't fulfil an order you have paid for, for example because a piece is out of stock, we return the amount paid.</p>,
+        body: (
+          <>
+            <p>Money is refunded only before an order is dispatched: when you cancel a paid order before dispatch, or when we can't fulfil it, for example because a piece is out of stock.</p>
+            <p>Once an order has been dispatched, it is not refunded. A piece that arrives damaged is replaced as described under Returns.</p>
+          </>
+        ),
       },
       {
         heading: "Returns",
@@ -95,11 +111,17 @@ const POLICIES: Record<PolicyView, { title: string; intro: string; sections: Sec
       },
       {
         heading: "Prices",
-        body: <p>Prices are in Indian Rupees. The amount we confirm on WhatsApp is the amount you pay.</p>,
+        body: <p>Prices are in Indian Rupees. The total shown at checkout, or the amount we confirm on WhatsApp, is the amount you pay.</p>,
       },
       {
         heading: "Orders",
-        body: <p>Sending us a bag on WhatsApp is an enquiry. It does not reserve stock. An order is confirmed only when we have confirmed availability and received payment. We may decline an order if a piece is unavailable, details are incorrect, or delivery isn't possible.</p>,
+        body: (
+          <>
+            <p>When you check out online, the pieces are held for you while you pay, and your order is placed once the payment goes through.</p>
+            <p>Sending us a bag on WhatsApp is an enquiry. It does not reserve stock, and that order is confirmed only when we have confirmed availability and received payment.</p>
+            <p>We may decline an order if a piece is unavailable, details are incorrect, or delivery isn't possible. If we decline an order you have paid for, we refund the amount paid.</p>
+          </>
+        ),
       },
       {
         heading: "Coupons",
@@ -142,23 +164,38 @@ const POLICIES: Record<PolicyView, { title: string; intro: string; sections: Sec
     sections: [
       {
         heading: "What we collect",
-        body: <p>This website has no customer accounts and no order form. When you order on WhatsApp or email us, we receive what you share, such as your name, phone number, delivery address and order details.</p>,
+        body: (
+          <>
+            <p>This website has no customer accounts. When you check out, you give us your name, phone number, email address (optional) and delivery address, which are saved with your order.</p>
+            <p>When you order on WhatsApp or email us, we receive what you share, such as your name, phone number, delivery address and order details.</p>
+          </>
+        ),
       },
       {
         heading: "Why we use it",
         body: <p>To confirm, deliver and support your order, to contact you about it, and to keep business and tax records.</p>,
       },
       {
+        heading: "Your location (optional)",
+        body: (
+          <>
+            <p>At checkout you can let the website use your location to fill in your PIN code, city and state. Your browser asks for permission first, and you can say no and type your address instead.</p>
+            <p>If you allow it, your position is sent to OpenStreetMap's address service to find the address. We don't store your location.</p>
+            <p>When you type a PIN code, it is checked with India Post's public PIN code service to fill in your city and state.</p>
+          </>
+        ),
+      },
+      {
         heading: "Stored on your device",
-        body: <p>Your bag, an applied coupon code and recently viewed pieces are saved in your own browser so they are there when you return. They reach us only if you send them on WhatsApp.</p>,
+        body: <p>Your bag, an applied coupon code, recent searches, recently viewed pieces and, if you choose, your delivery details for next time are saved in your own browser so they are there when you return. They reach us only when you place an order or send them on WhatsApp.</p>,
       },
       {
         heading: "Payment",
-        body: <p>We don't collect card or bank details on this website.</p>,
+        body: <p>Online payments are processed by Razorpay. Your card, UPI or bank details are entered in Razorpay's secure payment window and never reach us; we receive only the payment confirmation.</p>,
       },
       {
         heading: "Who handles your information",
-        body: <p>WhatsApp handles your messages under its own terms. We share your name, phone number and address with our courier for delivery. The site is hosted by Cloudflare, and its product information is stored with Supabase. We don't sell your information.</p>,
+        body: <p>WhatsApp handles your messages under its own terms, and Razorpay handles online payments under its own terms. We share your name, phone number and address with our courier for delivery. The site is hosted by Cloudflare, and its product information and orders are stored with Supabase. We don't sell your information.</p>,
       },
       {
         heading: "How long we keep it",
@@ -228,12 +265,39 @@ export default function PolicyPage({ view, onNavigate }: PolicyPageProps) {
           ))}
         </nav>
 
+        {/* Contents: jump to a section */}
+        {policy.sections.length > 2 && (
+          <nav aria-label="On this page" className="mt-8 panel p-5">
+            <p className="eyebrow text-ink mb-3">On this page</p>
+            <ol className="grid gap-x-6 gap-y-2 sm:grid-cols-2 text-sm list-decimal pl-5 marker:text-muted">
+              {policy.sections.map(({ heading }) => (
+                <li key={heading}>
+                  <a
+                    href={`#${sectionId(heading)}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      smoothScroll.scrollToElement(document.getElementById(sectionId(heading)));
+                    }}
+                    className="link"
+                  >
+                    {heading}
+                  </a>
+                </li>
+              ))}
+            </ol>
+          </nav>
+        )}
+
         <div className="mt-10 space-y-8">
           {policy.sections.map(({ heading, body }) => (
-            <section key={heading} className="border-t border-line pt-6">
-              <h2 className="font-serif text-xl text-ink mb-3">{heading}</h2>
-              <div className="text-sm text-ink/85 leading-relaxed space-y-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1.5">{body}</div>
-            </section>
+            <Fragment key={heading}>
+            <Reveal y={16}>
+              <section id={sectionId(heading)} className="border-t border-line pt-6 scroll-mt-28">
+                <h2 className="font-serif text-xl text-ink mb-3">{heading}</h2>
+                <div className="text-sm text-ink/85 leading-relaxed space-y-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1.5">{body}</div>
+              </section>
+            </Reveal>
+            </Fragment>
           ))}
         </div>
 

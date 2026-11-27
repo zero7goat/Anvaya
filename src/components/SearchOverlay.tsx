@@ -1,3 +1,4 @@
+import { clearRecentSearches, loadRecentSearches, rememberSearch } from "../utils/recentSearches";
 import { Fragment, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, Search, Star, X } from "lucide-react";
@@ -48,6 +49,7 @@ export default function SearchOverlay({ isOpen, onClose, onOpenProduct, onQuickV
 
 function SearchPanel({ onClose, onOpenProduct, onQuickView }: Omit<SearchOverlayProps, "isOpen">) {
   const [query, setQuery] = useState("");
+  const [recent, setRecent] = useState<string[]>(loadRecentSearches);
   const inputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
   const trimmed = query.trim();
@@ -101,9 +103,37 @@ function SearchPanel({ onClose, onOpenProduct, onQuickView }: Omit<SearchOverlay
   };
 
   const openProduct = (product: Product) => {
+    // Opening a piece from the results remembers what was searched
+    if (trimmed) setRecent(rememberSearch(trimmed));
     onClose();
     onOpenProduct(product);
   };
+
+  // The shopper's own recent searches, above the shop's suggestions
+  const recentSearches = recent.length > 0 && (
+    <div className="mb-5">
+      <div className="flex items-center justify-between gap-3 mb-2.5">
+        <h2 className="eyebrow text-ink">Recent searches</h2>
+        <button
+          type="button"
+          onClick={() => {
+            clearRecentSearches();
+            setRecent([]);
+          }}
+          className="link text-xs"
+        >
+          Clear
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {recent.map((term) => (
+          <button key={term} type="button" onClick={() => applySuggestion(term)} className="chip whitespace-nowrap">
+            {term}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 
   const showingResults = trimmed.length > 0;
   const products = showingResults ? results : featured;
@@ -149,8 +179,9 @@ function SearchPanel({ onClose, onOpenProduct, onQuickView }: Omit<SearchOverlay
         </form>
 
         <div className="flex-1 overflow-y-auto overscroll-contain">
-          {/* Top searches */}
+          {/* Recent, then top searches */}
           <section className="px-3 pt-3 pb-5" aria-labelledby="search-suggestions-title">
+            {recentSearches}
             <h2 id="search-suggestions-title" className="font-sans text-xs font-bold uppercase tracking-[0.08em] text-muted mb-3">
               Top searches
             </h2>
@@ -254,6 +285,7 @@ function SearchPanel({ onClose, onOpenProduct, onQuickView }: Omit<SearchOverlay
           className="container-page lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-10 py-6 sm:py-8"
         >
           <aside className="mb-7 lg:mb-0 lg:border-r lg:border-line lg:pr-8" aria-labelledby="search-suggestions-title">
+            {recentSearches}
             <h2 id="search-suggestions-title" className="eyebrow text-ink mb-3 lg:mb-4">
               Popular searches
             </h2>

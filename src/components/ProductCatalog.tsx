@@ -1,7 +1,11 @@
-import React, { Fragment, useState, useMemo } from "react";
+import React, { Fragment, useState, useMemo, useEffect } from "react";
 import { Star, Filter, SlidersHorizontal, Search } from "lucide-react";
 import { Product } from "../types";
 import ProductCard from "./ProductCard";
+import Reveal, { staggerDelay } from "./Reveal";
+
+// Pieces shown at first, and added by each "Show more"
+const PAGE_SIZE = 8;
 import { ALL_SIZES } from "../utils/sizes";
 
 interface ProductCatalogProps {
@@ -41,6 +45,10 @@ export default function ProductCatalog({
   }, [selectedCategory]);
 
   // Apply filters
+  // The catalogue starts short; a new filter or search starts it short again
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  useEffect(() => setVisibleCount(PAGE_SIZE), [selectedCategory, searchQuery, sortBy]);
+
   const filteredProducts = useMemo(() => {
     return products
       .filter((product) => {
@@ -242,7 +250,7 @@ export default function ProductCatalog({
       {/* Results Count & Active Filters Indicator */}
       <div className="flex items-center justify-between text-xs text-muted mb-6">
         <div>
-          Showing <span className="font-semibold text-ink">{filteredProducts.length}</span> pieces
+          Showing <span className="font-semibold text-ink">{filteredProducts.length}</span> {filteredProducts.length === 1 ? "piece" : "pieces"}
           {searchQuery && <span> matching "{searchQuery}"</span>}
         </div>
         {(selectedSubcategory !== "All" || selectedSize !== "All" || priceRange !== "All" || filterStockOnly) && (
@@ -281,13 +289,27 @@ export default function ProductCatalog({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-          {filteredProducts.map((product) => (
-            <Fragment key={product.id}>
-              <ProductCard product={product} variant="catalogue" onOpen={onProductClick} onQuickView={onQuickView} />
-            </Fragment>
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+            {filteredProducts.slice(0, visibleCount).map((product, i) => (
+              <Fragment key={product.id}>
+                <Reveal delay={staggerDelay(i)} className="flex [&>*]:flex-1">
+                  <ProductCard product={product} variant="catalogue" onOpen={onProductClick} onQuickView={onQuickView} />
+                </Reveal>
+              </Fragment>
+            ))}
+          </div>
+          {filteredProducts.length > visibleCount && (
+            <div className="mt-10 flex flex-col items-center gap-2">
+              <p className="text-xs text-muted">
+                Showing {visibleCount} of {filteredProducts.length} pieces
+              </p>
+              <button type="button" onClick={() => setVisibleCount((n) => n + PAGE_SIZE)} className="btn btn-secondary">
+                Show more
+              </button>
+            </div>
+          )}
+        </>
       )}
     </section>
   );

@@ -10,6 +10,10 @@ import { COLLECTION_STYLES } from "../utils/productRules";
 import { formatINR } from "../utils/productDisplay";
 import { OVERLAY_MOTION } from "../utils/motion";
 import { useOverlay } from "../hooks/useOverlay";
+import { useIsMobile } from "../hooks/useIsMobile";
+import ProductImage from "./ProductImage";
+import Reveal, { staggerDelay } from "./Reveal";
+import { SITE_IMAGES, getProductImage } from "../data/imageRegistry";
 import {
   CollectionFilters, FilterOptions, NO_FILTERS, applyCollectionFilters, countActiveFilters, getFilterOptions,
 } from "../utils/collectionFilters";
@@ -60,6 +64,15 @@ export default function CollectionPage({
   const otherCollectionKey: CollectionType = collectionKey === "alankritha" ? "ayanaa" : "alankritha";
   const otherCollectionInfo = BOUTIQUE_CONFIG.collections[otherCollectionKey];
   const styles = COLLECTION_STYLES[collectionKey];
+
+  // Page title names the collection (shown in the browser tab and search results)
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = `${collectionInfo.name} ${collectionKey === "alankritha" ? "Kurtas" : "Sarees"} | ${BOUTIQUE_CONFIG.brandName}`;
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [collectionKey]);
 
   // Filtering & Search states
   const [searchQuery, setSearchQuery] = useState("");
@@ -132,6 +145,11 @@ export default function CollectionPage({
   };
 
   const countText = `${products.length} ${products.length === 1 ? "piece" : "pieces"}`;
+
+  // Header cover: the collection's own cover photo, else its newest piece with a photo
+  const coverImage =
+    SITE_IMAGES.collectionCovers[collectionKey] ||
+    getProductImage(collectionProducts.find((p) => getProductImage(p)) ?? { id: "", image: "", additionalImages: [] });
 
   // Filter controls, shown in the side column on wide screens and in the drawer otherwise
   const renderFilters = (idPrefix: string) => (
@@ -259,21 +277,9 @@ export default function CollectionPage({
 
   return (
     <div className="min-h-screen bg-canvas text-ink pb-24">
-      {/* Breadcrumb + collection switch */}
+      {/* Collection switch */}
       <div className="bg-surface border-b border-line py-3">
-        <div className="container-page flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <nav aria-label="Breadcrumb">
-            <ol className="breadcrumb">
-              <li>
-                <button onClick={onReturnHome}>Home</button>
-              </li>
-              <li className="flex items-center gap-1.5">
-                <ChevronRight className="w-3 h-3 shrink-0" aria-hidden="true" />
-                <span className="text-ink" aria-current="page">{collectionInfo.name}</span>
-              </li>
-            </ol>
-          </nav>
-
+        <div className="container-page flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
           <div className="segmented text-xs" role="tablist" aria-label="Collection">
             <button
               onClick={() => onNavigateCollection("alankritha")}
@@ -296,15 +302,31 @@ export default function CollectionPage({
       </div>
 
       {/* Collection heading: name, with "By Anvaya" directly beneath */}
-      <header className="relative isolate overflow-hidden container-page pt-8 pb-6 sm:pt-10 sm:pb-8">
-        <BackgroundMotif kind="paisley" className="right-2 md:right-6 lg:right-16 top-2 md:top-4 w-16 h-28 md:w-28 md:h-44 rotate-[20deg]" />
+      <header className="relative isolate overflow-hidden container-page pt-8 pb-8 sm:pt-10 sm:pb-10">
         <BackgroundMotif kind="mandala" className="right-20 md:right-40 lg:right-52 top-4 md:top-10 w-14 h-14 md:w-24 md:h-24" />
-        <h1 className="heading-title sm:text-4xl">{collectionInfo.name}</h1>
-        <span className="eyebrow block mt-1.5 tracking-[0.28em]">{collectionInfo.byline}</span>
-        <p className="text-body mt-4 max-w-2xl">
-          <span className="font-serif italic text-ink">{collectionInfo.tagline}.</span>{" "}
-          {collectionInfo.description}
-        </p>
+        <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_16rem] lg:grid-cols-[minmax(0,1fr)_20rem] md:items-center">
+          <Reveal>
+            <p className="eyebrow mb-2">{collectionKey === "alankritha" ? "Women's Kurtas" : "Women's Sarees"}</p>
+            <h1 className="heading-title sm:text-5xl">{collectionInfo.name}</h1>
+            <span className="eyebrow block mt-1.5 tracking-[0.28em]">{collectionInfo.byline}</span>
+            <p className="text-body mt-4 max-w-2xl">
+              <span className="font-serif italic text-ink">{collectionInfo.tagline}.</span>{" "}
+              {collectionInfo.description}
+            </p>
+            <p className="mt-4 text-xs text-muted">
+              <span className="font-semibold text-ink tabular-nums">{collectionProducts.length}</span>{" "}
+              {collectionProducts.length === 1 ? "piece" : "pieces"} · Free shipping across India
+            </p>
+          </Reveal>
+          {coverImage && (
+            <Reveal delay={0.15} className="hidden md:block">
+              {/* Arched cover, like the homepage collection arches */}
+              <div className="aspect-[3/4] overflow-hidden rounded-t-full bg-surface-muted shadow-md">
+                <ProductImage src={coverImage} alt="" className="w-full h-full object-cover" loading="eager" sizes="320px" />
+              </div>
+            </Reveal>
+          )}
+        </div>
       </header>
 
       <div className="container-page lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-10">
@@ -413,13 +435,19 @@ export default function CollectionPage({
           {/* Product Cards Grid */}
           {products.length === 0 ? (
             <div className="empty-state my-8">
-              <h3 className="heading-card mb-2">No matching outfits found</h3>
+              <h3 className="heading-card mb-2">No pieces match these filters</h3>
               <p className="text-sm text-muted max-w-sm mx-auto mb-5">
-                Try removing a filter or changing your search to see more pieces.
+                Try removing a filter or changing your search. You can also browse {otherCollectionInfo.name}, or ask us on
+                WhatsApp about a piece you are looking for.
               </p>
-              <button type="button" onClick={resetFilters} className="btn btn-primary">
-                Clear Filters
-              </button>
+              <div className="flex flex-wrap justify-center gap-3">
+                <button type="button" onClick={resetFilters} className="btn btn-primary">
+                  Clear filters
+                </button>
+                <button type="button" onClick={() => onNavigateCollection(otherCollectionKey)} className="btn btn-secondary">
+                  Browse {otherCollectionInfo.name}
+                </button>
+              </div>
             </div>
           ) : (
             <div
@@ -427,9 +455,11 @@ export default function CollectionPage({
                 density === "compact" ? "md:grid-cols-3 xl:grid-cols-4" : "md:grid-cols-2 xl:grid-cols-3"
               }`}
             >
-              {products.map((product) => (
+              {products.map((product, i) => (
                 <Fragment key={product.id}>
-                  <ProductCard product={product} variant="listing" onOpen={onProductClick} onQuickView={onQuickView} />
+                  <Reveal delay={staggerDelay(i, density === "compact" ? 4 : 3)} className="flex [&>*]:flex-1">
+                    <ProductCard product={product} variant="listing" onOpen={onProductClick} onQuickView={onQuickView} />
+                  </Reveal>
                 </Fragment>
               ))}
             </div>
@@ -620,6 +650,7 @@ function FilterDrawer({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   useOverlay(isOpen, onClose, panelRef);
+  const isPhone = useIsMobile();
 
   // The filter column takes over from 1024px, so close the drawer (and its scroll lock) there
   useEffect(() => {
@@ -634,19 +665,26 @@ function FilterDrawer({
   return (
     <AnimatePresence>
       {isOpen && (
-        <motion.div key="collection-filters" exit={{ pointerEvents: "none" }} className="fixed inset-0 z-50 flex justify-end lg:hidden">
+        <motion.div
+          key="collection-filters"
+          exit={{ pointerEvents: "none" }}
+          className={`fixed inset-0 z-50 flex lg:hidden ${isPhone ? "items-end" : "justify-end"}`}
+        >
           <motion.div {...OVERLAY_MOTION.backdrop} className="overlay-backdrop" onClick={onClose} />
           <motion.div
-            {...OVERLAY_MOTION.drawerRight}
+            {...(isPhone ? OVERLAY_MOTION.sheetUp : OVERLAY_MOTION.drawerRight)}
             ref={panelRef}
             tabIndex={-1}
             id="collection-filters"
             role="dialog"
             aria-modal="true"
             aria-labelledby="collection-filters-title"
-            className="relative z-10 flex flex-col w-full max-w-[400px] h-full bg-surface text-ink shadow-2xl outline-none"
+            className={`relative z-10 flex flex-col w-full bg-surface text-ink shadow-2xl outline-none ${
+              isPhone ? "max-h-[85svh] rounded-t-2xl pb-[env(safe-area-inset-bottom)]" : "max-w-[400px] h-full"
+            }`}
           >
-            <div className="flex items-center justify-between gap-3 px-5 h-16 border-b border-line shrink-0">
+            {isPhone && <span className="mx-auto mt-2.5 w-10 h-1 rounded-full bg-line-strong shrink-0" aria-hidden="true" />}
+            <div className="flex items-center justify-between gap-3 px-5 h-14 sm:h-16 border-b border-line shrink-0">
               <h2 id="collection-filters-title" className="flex items-center gap-2.5 eyebrow text-ink">
                 <SlidersHorizontal className="w-4 h-4 text-ink-soft" aria-hidden="true" />
                 Filter

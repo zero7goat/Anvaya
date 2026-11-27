@@ -109,7 +109,7 @@ export default function ProductInfoSections({ product }: { product: Product }) {
             <li>Free shipping.</li>
             {codEnabled && <li>Cash on Delivery: pay by cash or UPI at your door.</li>}
             <li>You can cancel an order only before it is dispatched.</li>
-            <li>No refunds.</li>
+            <li>Refunds only for orders cancelled before dispatch.</li>
             <li>Returns are accepted only for damage, with a video of the unboxing, and if the piece hasn't been worn.</li>
             <li>
               <a href="/shipping-and-returns" className="link">

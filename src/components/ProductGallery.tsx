@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, MouseEvent } from "react";
+import { Fragment, useEffect, useRef, useState, MouseEvent, PointerEvent } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronLeft, ChevronRight, Expand, X, ZoomIn } from "lucide-react";
 import { OVERLAY_MOTION } from "../utils/motion";
@@ -280,13 +280,14 @@ export function ImageViewer({
           id="product-image-viewer"
           onClick={onClose}
         >
-          <img
-            src={imageAtWidth(images[index], ZOOM_SOURCE_WIDTH)}
-            alt={hasMany ? `${productName}, image ${index + 1} of ${images.length}` : productName}
-            referrerPolicy="no-referrer"
-            className="max-h-[92vh] max-w-full object-contain select-none"
-            onClick={(e) => e.stopPropagation()}
-          />
+          {/* Keyed by image, so each photo opens unzoomed */}
+          <Fragment key={index}>
+            <ZoomableImage
+              src={imageAtWidth(images[index], ZOOM_SOURCE_WIDTH)}
+              alt={hasMany ? `${productName}, image ${index + 1} of ${images.length}` : productName}
+              onSwipe={hasMany ? go : undefined}
+            />
+          </Fragment>
 
           <button
             ref={closeRef}
@@ -330,5 +331,99 @@ export function ImageViewer({
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+// Full-screen zoom limits
+const VIEWER_MAX_SCALE = 4;
+const VIEWER_TAP_SCALE = 2.5;
+
+/**
+ * Full-screen photo you can zoom: click or tap to zoom in at that point (again to zoom out),
+ * pinch with two fingers, drag to look around while zoomed, and swipe sideways (not zoomed)
+ * for the next photo. The wrapper is transformed; the image itself never scales.
+ */
+function ZoomableImage({ src, alt, onSwipe }: { src: string; alt: string; onSwipe?: (delta: number) => void }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState({ scale: 1, x: 0, y: 0 });
+  const [animate, setAnimate] = useState(true);
+  // Active pointers, and the gesture they started
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const gesture = useRef<{ startDist: number; startScale: number; startX: number; startY: number; moved: boolean; viewX: number; viewY: number } | null>(null);
+
+  const zoomAt = (clientX: number, clientY: number, scale: number) => {
+    const box = wrapRef.current?.getBoundingClientRect();
+    if (!box) return;
+    // Keep the tapped point where it is: offset = (point - centre) * (1 - scale)
+    const cx = box.left + box.width / 2 - view.x;
+    const cy = box.top + box.height / 2 - view.y;
+    setView({ scale, x: (clientX - cx) * (1 - scale), y: (clientY - cy) * (1 - scale) });
+  };
+
+  const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const pts = [...pointers.current.values()];
+    const dist = pts.length === 2 ? Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) : 0;
+    gesture.current = { startDist: dist, startScale: view.scale, startX: e.clientX, startY: e.clientY, moved: false, viewX: view.x, viewY: view.y };
+    setAnimate(false);
+  };
+
+  const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
+    if (!pointers.current.has(e.pointerId) || !gesture.current) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const g = gesture.current;
+    const pts = [...pointers.current.values()];
+    if (pts.length === 2 && g.startDist > 0) {
+      // Pinch
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const scale = Math.min(VIEWER_MAX_SCALE, Math.max(1, (g.startScale * dist) / g.startDist));
+      g.moved = true;
+      setView((v) => (scale === 1 ? { scale: 1, x: 0, y: 0 } : { ...v, scale }));
+      return;
+    }
+    const dx = e.clientX - g.startX;
+    const dy = e.clientY - g.startY;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) g.moved = true;
+    // Drag to look around a zoomed photo
+    if (view.scale > 1) setView((v) => ({ ...v, x: g.viewX + dx, y: g.viewY + dy }));
+  };
+
+  const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    const g = gesture.current;
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size > 0 || !g) return;
+    gesture.current = null;
+    setAnimate(true);
+    const dx = e.clientX - g.startX;
+    if (!g.moved) {
+      // A tap or click: zoom in at that point, or back out
+      if (view.scale > 1) setView({ scale: 1, x: 0, y: 0 });
+      else zoomAt(e.clientX, e.clientY, VIEWER_TAP_SCALE);
+    } else if (view.scale === 1 && onSwipe && Math.abs(dx) > 50) {
+      onSwipe(dx < 0 ? 1 : -1);
+    }
+  };
+
+  const zoomed = view.scale > 1;
+  return (
+    <div
+      ref={wrapRef}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onClick={(e) => e.stopPropagation()}
+      className={`touch-none select-none ${zoomed ? "cursor-zoom-out" : "cursor-zoom-in"}`}
+      style={{
+        transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
+        transition: animate ? "transform 350ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
+      }}
+    >
+      <img src={src} alt={alt} referrerPolicy="no-referrer" draggable={false} className="max-h-[92vh] max-w-full object-contain pointer-events-none" />
+      <span className="sr-only">Tap or click to zoom. Pinch to zoom, drag to move.</span>
+    </div>
   );
 }

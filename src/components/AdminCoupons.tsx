@@ -19,7 +19,8 @@ const toForm = (c: Coupon): CouponForm => ({
  * public.offers, and checkout uses it from the next price check. The coupon box appears
  * in customers' bags only while at least one coupon is switched on.
  */
-export default function AdminCoupons() {
+// usage: orders that used each code (from the dashboard's loaded orders); left out while they load
+export default function AdminCoupons({ usage }: { usage?: Record<string, number> } = {}) {
   const [coupons, setCoupons] = useState<Coupon[] | null>(null);
   const [loadError, setLoadError] = useState("");
   const [notice, setNotice] = useState<{ kind: "success" | "error"; text: string } | null>(null);
@@ -227,6 +228,11 @@ export default function AdminCoupons() {
                     <td data-label="" className="py-3 px-4">
                       <div className="font-semibold text-neutral-900">{c.code}</div>
                       {c.title && <div className="text-xs text-neutral-400">{c.title}</div>}
+                      {usage && (
+                        <div className="text-xs text-neutral-500 mt-0.5 tabular-nums">
+                          Used in {usage[c.code] ?? 0} order{(usage[c.code] ?? 0) === 1 ? "" : "s"}
+                        </div>
+                      )}
                     </td>
                     <td data-label="Discount" className="py-3 px-4 tabular-nums">
                       {c.kind === "percent" ? `${c.value}% off` : `${formatINR(c.value)} off`}

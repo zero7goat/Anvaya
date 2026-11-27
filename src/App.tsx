@@ -27,6 +27,7 @@ import { loadSavedCoupon, saveCoupon } from "./utils/savedCoupon";
 import { calculateCartTotals } from "./utils/pricing";
 import { POLICY_LINKS, resolveRoute, type ViewState } from "./utils/routes";
 import NotFoundPage from "./components/NotFoundPage";
+import BackToTop from "./components/BackToTop";
 
 // Screens most visitors never open load on first use, keeping the first page light
 const AdminDashboard = lazy(() => import("./components/AdminDashboard"));
@@ -72,6 +73,8 @@ export default function App() {
   // Cart State
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
+  // The bag line just added, highlighted in the bag for a moment
+  const [justAdded, setJustAdded] = useState<{ key: string; at: number } | null>(null);
   // The code applied in the bag, kept across reloads (see utils/savedCoupon.ts)
   const [bagCouponCode, setBagCouponCode] = useState<string | undefined>(loadSavedCoupon);
   useEffect(() => saveCoupon(bagCouponCode), [bagCouponCode]);
@@ -111,10 +114,11 @@ export default function App() {
   // products are known, then re-check prices and stock whenever products change
   useEffect(() => {
     if (products.length === 0) return;
+    // The saved cart is read once, outside the state update (updates may run twice)
+    const saved = cartHydrated.current ? null : readStoredCart();
+    cartHydrated.current = true;
     setCart((prev) => {
-      const lines = cartHydrated.current ? toStoredCart(prev) : readStoredCart();
-      cartHydrated.current = true;
-      const next = reconcileCart(lines, products);
+      const next = reconcileCart(saved ?? toStoredCart(prev), products);
       return sameCart(prev, next) ? prev : next;
     });
   }, [products]);
@@ -258,6 +262,7 @@ export default function App() {
   const handleAddToCart = (product: Product, size: string, quantity: number) => {
     if ((product.sizeStock?.[size] || 0) <= 0) return;
     setCart((prevCart) => addCartItem(prevCart, product, size, quantity));
+    setJustAdded({ key: `${product.id}|${size}`, at: Date.now() });
     setIsCartOpen(true);
   };
 
@@ -407,6 +412,7 @@ export default function App() {
             documentTitle={`Page not found | ${BOUTIQUE_CONFIG.brandName}`}
             onNavigateHome={() => navigateTo("store")}
             onNavigateCollection={navigateToCollection}
+            onOpenProduct={openProduct}
           />
         )}
 
@@ -450,6 +456,9 @@ export default function App() {
       {/* Footer */}
       {renderFooter()}
 
+      {/* Long pages: a way back to the top (above the product page's phone buy bar) */}
+      <BackToTop raised={currentView === "product"} />
+
       {/* ====================================================
           OVERLAYS, MODALS AND DRAWERS
           ==================================================== */}
@@ -478,6 +487,8 @@ export default function App() {
         onRemoveItem={handleRemoveFromCart}
         couponCode={bagCouponCode}
         onCouponChange={setBagCouponCode}
+        justAdded={justAdded}
+        onOpenProduct={openProduct}
         onCheckout={
           BOUTIQUE_CONFIG.onlinePayment.enabled
             ? () => {

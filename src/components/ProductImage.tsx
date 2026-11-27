@@ -1,4 +1,4 @@
-import { SyntheticEvent, useEffect, useState } from "react";
+import { SyntheticEvent, useEffect, useRef, useState } from "react";
 import { ImageOff } from "lucide-react";
 import { IMAGE_WIDTHS, imageAtWidth, responsiveImage } from "../utils/imageSources";
 
@@ -15,6 +15,8 @@ interface ProductImageProps {
   sizes?: string;
   id?: string;
   onLoad?: (e: SyntheticEvent<HTMLImageElement>) => void;
+  // "none": show nothing when there is no image or it fails (for extra layers, like a hover photo)
+  fallback?: "placeholder" | "none";
 }
 
 const CARD_SIZES = "(min-width: 1280px) 300px, (min-width: 768px) 33vw, 50vw";
@@ -25,6 +27,7 @@ const THUMBNAIL_WIDTH = 360;
  * image that fails to load, renders the same-sized "Image coming soon" placeholder
  * instead of a broken-image icon. Never substitutes a different photograph.
  * Requests a size-appropriate file from the image host where it supports resizing.
+ * While the file arrives it shimmers softly, then fades in.
  */
 export default function ProductImage({
   src,
@@ -35,13 +38,20 @@ export default function ProductImage({
   sizes = CARD_SIZES,
   id,
   onLoad,
+  fallback = "placeholder",
 }: ProductImageProps) {
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
 
-  // A new source gets a fresh attempt
-  useEffect(() => setFailed(false), [src]);
+  // A new source gets a fresh attempt; one already in the browser's cache shows at once
+  useEffect(() => {
+    setFailed(false);
+    setLoaded(Boolean(imgRef.current?.complete && imgRef.current.naturalWidth > 0));
+  }, [src]);
 
   if (!src || failed) {
+    if (fallback === "none") return null;
     return <ImagePlaceholder className={className} compact={compact} label={alt} />;
   }
 
@@ -54,11 +64,15 @@ export default function ProductImage({
       sizes={sources.srcSet ? sizes : undefined}
       alt={alt}
       id={id}
+      ref={imgRef}
       referrerPolicy="no-referrer"
-      className={className}
+      className={`${className} ${loaded ? "photo-loaded" : "photo-loading"}`}
       loading={loading}
       decoding="async"
-      onLoad={onLoad}
+      onLoad={(e) => {
+        setLoaded(true);
+        onLoad?.(e);
+      }}
       onError={() => setFailed(true)}
     />
   );

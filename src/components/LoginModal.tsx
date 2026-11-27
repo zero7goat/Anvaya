@@ -90,8 +90,10 @@ export default function LoginModal({ isOpen, onClose, footer }: LoginModalProps)
                 Customer accounts aren't available yet, and you don't need one to shop.
               </p>
               <p className="text-sm text-muted mt-3 leading-relaxed">
-                Add pieces to your bag and send it to us on WhatsApp. We'll confirm availability, the final amount
-                and payment in the chat. You can also email{" "}
+                {BOUTIQUE_CONFIG.onlinePayment.enabled
+                  ? "Add pieces to your bag and check out to pay securely online, or send your bag to us on WhatsApp."
+                  : "Add pieces to your bag and send it to us on WhatsApp. We'll confirm availability, the final amount and payment in the chat."}{" "}
+                You can also email{" "}
                 <a href={`mailto:${BOUTIQUE_CONFIG.supportEmail}`} className="link">
                   {BOUTIQUE_CONFIG.supportEmail}
                 </a>

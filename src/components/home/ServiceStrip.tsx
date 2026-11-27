@@ -1,4 +1,4 @@
-import { Banknote, Mail, MapPin, MessageSquare, Truck } from "lucide-react";
+import { Banknote, Mail, MapPin, MessageSquare, Truck, ShieldCheck } from "lucide-react";
 import { BOUTIQUE_CONFIG } from "../../config";
 
 /**
@@ -15,12 +15,14 @@ export default function ServiceStrip() {
     cod
       ? { icon: Banknote, title: "Cash on Delivery", detail: "Pay by cash or UPI at your door" }
       : { icon: Mail, title: "Email us", detail: BOUTIQUE_CONFIG.supportEmail, href: `mailto:${BOUTIQUE_CONFIG.supportEmail}` },
-    {
-      icon: MessageSquare,
-      title: "Order on WhatsApp",
-      detail: BOUTIQUE_CONFIG.supportHours,
-      href: `https://wa.me/${BOUTIQUE_CONFIG.whatsappNumber}`,
-    },
+    BOUTIQUE_CONFIG.onlinePayment.enabled
+      ? { icon: ShieldCheck, title: "Secure online payment", detail: "UPI, cards and net banking" }
+      : {
+          icon: MessageSquare,
+          title: "Order on WhatsApp",
+          detail: BOUTIQUE_CONFIG.supportHours,
+          href: `https://wa.me/${BOUTIQUE_CONFIG.whatsappNumber}`,
+        },
     {
       icon: MapPin,
       title: "Delivering across India",

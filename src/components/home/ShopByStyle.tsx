@@ -36,15 +36,16 @@ export function getStyleCards() {
 /**
  * Six style cards (three kurta styles, three saree styles). Each opens its collection
  * page with that style selected. Images: a supplied style cover, else the first
- * product photo in that style, else the neutral placeholder. A style with no pieces
- * yet is shown as "coming soon" and is not clickable.
+ * product photo in that style, else the neutral placeholder. Styles with no pieces yet
+ * are left out (the section hides when none have pieces).
  */
 export default function ShopByStyle({
   onNavigateCollectionStyle,
 }: {
   onNavigateCollectionStyle: (collection: CollectionType, style: string) => void;
 }) {
-  const cards = getStyleCards();
+  const cards = getStyleCards().filter((card) => card.count > 0);
+  if (cards.length === 0) return null;
 
   return (
     <section className="relative isolate overflow-hidden section-y border-t border-line" id="shop-by-style-section" aria-labelledby="shop-by-style-title">
@@ -53,7 +54,11 @@ export default function ShopByStyle({
       <div className="relative container-page">
         <SectionHeader eyebrow="Kurtas & sarees" title="Shop by Style" id="shop-by-style-title" />
 
-        <ul className="flex lg:grid lg:grid-cols-6 gap-3 sm:gap-4 overflow-x-auto lg:overflow-visible snap-x snap-mandatory -mx-4 px-4 sm:mx-0 sm:px-0 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <ul
+          className="flex lg:grid gap-3 sm:gap-4 overflow-x-auto lg:overflow-visible snap-x snap-mandatory -mx-4 px-4 sm:mx-0 sm:px-0 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          // Wide screens: one row; a few styles keep a sensible card size instead of stretching
+          style={{ gridTemplateColumns: `repeat(${Math.max(cards.length, 5)}, minmax(0, 1fr))` }}
+        >
           {cards.map(({ collection, style, count, image }) => {
             const collectionInfo = BOUTIQUE_CONFIG.collections[collection];
             const available = count > 0;

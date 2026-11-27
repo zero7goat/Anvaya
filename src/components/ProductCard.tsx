@@ -13,7 +13,29 @@ import {
 import QuickViewButton from "./QuickViewButton";
 import { useQuickAdd } from "./QuickAddToCart";
 import ProductImage from "./ProductImage";
-import { getProductImage } from "../data/imageRegistry";
+import { getProductImages } from "../data/imageRegistry";
+
+// Only devices that can hover load a card's second photo (phones never see it)
+const CAN_HOVER = typeof window !== "undefined" && window.matchMedia?.("(hover: hover)").matches;
+
+/**
+ * The card's photo. On hover the frame eases slightly closer and the second photo, when
+ * there is one, fades in over the first (the images themselves never scale).
+ */
+function CardPhoto({ product }: { product: Product }) {
+  const [main = "", second] = getProductImages(product);
+  return (
+    <div className="card-zoom absolute inset-0">
+      <ProductImage src={main} alt={product.name} className="w-full h-full object-cover" />
+      {CAN_HOVER && second && (
+        <ProductImage src={second} alt="" fallback="none" className="card-alt-photo absolute inset-0 w-full h-full object-cover" />
+      )}
+    </div>
+  );
+}
+
+// One-of-a-kind and nearly gone: worth saying on the card
+const LOW_STOCK = 2;
 
 interface ProductCardProps {
   product: Product;
@@ -28,10 +50,13 @@ interface ProductCardProps {
  * Shared product card. The card is a real link to the product page (so it works
  * with the keyboard, middle-click and "open in new tab"); the quick-view eye
  * and quick-add buttons sit beside the link, never inside it, so they never trigger
- * each other. Hover effects (product-card-* in index.css) move the card, never scale it.
+ * each other. Hover effects (product-card-* and card-* in index.css) lift the card and ease its
+ * photo frame closer; the image itself never scales.
  */
 export default function ProductCard({ product, variant = "catalogue", onOpen, onQuickView }: ProductCardProps) {
-  const isAvailable = productService.getTotalStock(product) > 0;
+  const totalStock = productService.getTotalStock(product);
+  const isAvailable = totalStock > 0;
+  const lowStock = isAvailable && totalStock <= LOW_STOCK ? `Only ${totalStock} left` : null;
   const discountPct = getDiscountPercent(product);
   const collectionName = BOUTIQUE_CONFIG.collections[getCollectionKey(product)].name;
   const quickAdd = useQuickAdd(product);
@@ -75,8 +100,10 @@ export default function ProductCard({ product, variant = "catalogue", onOpen, on
           className="flex flex-1 flex-col cursor-pointer focus-visible:outline-offset-2"
         >
           <div className="relative aspect-[3/4] w-full overflow-hidden bg-surface-muted">
-            <ProductImage src={getProductImage(product)} alt={product.name} className="w-full h-full object-cover" />
+            <CardPhoto product={product} />
             {hoverLayers}
+
+            {lowStock && <div className="absolute top-2 left-2 badge badge-sale">{lowStock}</div>}
 
             {!isAvailable && (
               <div className="absolute inset-0 bg-black/45 flex items-center justify-center">
@@ -128,7 +155,7 @@ export default function ProductCard({ product, variant = "catalogue", onOpen, on
       >
         {/* Image Section - Clean, borderless presentation */}
         <div className="relative aspect-[3/4] w-full overflow-hidden bg-transparent">
-          <ProductImage src={getProductImage(product)} alt={product.name} className="w-full h-full object-cover" />
+          <CardPhoto product={product} />
           {hoverLayers}
 
           {/* Sold Out Overlay */}
@@ -140,10 +167,11 @@ export default function ProductCard({ product, variant = "catalogue", onOpen, on
             </div>
           )}
 
-          {/* Discount Badge */}
-          {isAvailable && discountPct && (
-            <div className="absolute top-2 left-2 badge badge-sale">
-              {discountPct}% OFF
+          {/* Discount and low-stock badges */}
+          {isAvailable && (discountPct || lowStock) && (
+            <div className="absolute top-2 left-2 flex flex-col items-start gap-1">
+              {discountPct && <span className="badge badge-sale">{discountPct}% OFF</span>}
+              {lowStock && <span className="badge badge-overlay">{lowStock}</span>}
             </div>
           )}
 
@@ -180,8 +208,8 @@ export default function ProductCard({ product, variant = "catalogue", onOpen, on
             </div>
 
             {variant === "catalogue" ? (
-              <span className={`text-2xs font-semibold ${isAvailable ? "text-success" : "text-muted"}`}>
-                {isAvailable ? "In Stock" : "Sold Out"}
+              <span className={`text-2xs font-semibold ${lowStock ? "text-maroon-600" : isAvailable ? "text-success" : "text-muted"}`}>
+                {lowStock ?? (isAvailable ? "In Stock" : "Sold Out")}
               </span>
             ) : (
               <span className="text-2xs text-muted whitespace-nowrap">

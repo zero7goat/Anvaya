@@ -3,7 +3,8 @@ import {
   Package, ShoppingBag, AlertTriangle, CheckCircle2, Clock, 
   Search, Plus, Edit2, Trash2, Eye, EyeOff, LogOut, ArrowLeft, 
   Filter, Check, X, RefreshCw, Smartphone, ExternalLink,
-  Layers, DollarSign, Store, Bell, BellOff, Volume2, VolumeX, LayoutDashboard, Ticket
+  Layers, DollarSign, Store, Bell, BellOff, Volume2, VolumeX, LayoutDashboard, Ticket,
+  MessageSquare, Phone, Minus, Copy, TrendingUp, PackageX
 } from "lucide-react";
 import { Product, Order, CollectionType } from "../types";
 import { productService } from "../services/productService";
@@ -22,6 +23,11 @@ import { BOX_INPUT, DomeBorder, LabelledBox } from "./AuthFormParts";
 import { getProductImage } from "../data/imageRegistry";
 import { ALL_SIZES, FREE_SIZE, describeSize, getSizeOptions, getSizeOptionsFor } from "../utils/productDisplay";
 import { filterInventory } from "../utils/inventorySearch";
+import {
+  ORDER_STATUSES, couponUsage, customerPhoneHref, customerWhatsAppUrl, lowStockSizes, orderPaymentLabel, orderStatusCounts,
+  ordersNeedingAttention, salesSummary,
+} from "../utils/adminInsights";
+import { splitColourName } from "../utils/productDetails";
 import { useNewOrderAlerts, type NotificationState } from "../hooks/useNewOrderAlerts";
 import { ORDER_POLL_MS } from "../services/orderAlerts";
 import {
@@ -272,6 +278,43 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
     };
   }, [products, orders]);
 
+  // Overview: what needs doing, recent sales, sizes running out; coupon use for the Coupons tab
+  const insights = useMemo(
+    () => ({
+      statusCounts: orderStatusCounts(orders),
+      attention: ordersNeedingAttention(orders),
+      sales: salesSummary(orders),
+      lowStock: lowStockSizes(products.filter((p) => p.status === "enabled")),
+      couponUsage: couponUsage(orders),
+    }),
+    [orders, products]
+  );
+
+  // Products picked for "Publish" / "Hide" together
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
+  const toggleProductSelected = (id: string) =>
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const handleBulkStatus = async (status: "enabled" | "disabled") => {
+    const targets = products.filter((p) => selectedProductIds.has(p.id) && p.status !== status);
+    let done = 0;
+    for (const product of targets) {
+      const ok = await runAction(`status:${product.id}`, () => catalogueAdmin.setStatus(product.id, status), "");
+      if (ok) done += 1;
+    }
+    setSelectedProductIds(new Set());
+    if (targets.length > 0) {
+      setNotice({
+        kind: done === targets.length ? "success" : "warning",
+        text: `${done} of ${targets.length} product${targets.length === 1 ? "" : "s"} ${status === "enabled" ? "published" : "hidden from the shop"}.`,
+      });
+    }
+  };
+
   // Filtered products list for product management
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
@@ -373,6 +416,27 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
   };
 
   // Open modal to edit existing product
+  // Start a new product from an existing one: same details and price, no photos and no stock,
+  // hidden until it has its own photos. "Garden Whisper (Green)" becomes "Garden Whisper (New colour)".
+  const handleOpenDuplicateModal = (product: Product) => {
+    handleOpenAddModal();
+    const colour = splitColourName(product.name);
+    setFormData((prev) => ({
+      ...prev,
+      name: colour ? `${colour.base} (New colour)` : `${product.name} (copy)`,
+      description: product.description,
+      collection: product.collection || (product.category === "Sarees" ? "ayanaa" : "alankritha"),
+      category: product.category as "Kurtas" | "Sarees",
+      subcategory: product.subcategory || prev.subcategory,
+      price: product.price.toString(),
+      salePrice: product.salePrice ? product.salePrice.toString() : "",
+      isFeatured: false,
+      isNewArrival: true,
+      status: "disabled",
+      sizeStock: Object.fromEntries(ALL_SIZES.map((sz) => [sz, 0])),
+    }));
+  };
+
   const handleOpenEditModal = (product: Product) => {
     setEditingProduct(product);
     setFormData({
@@ -589,7 +653,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
       `Saved ${describeSize(size)} stock for “${product.name}”.`
     );
 
-  // "+5 All" adds 5 to every size; "Mark Out" sets every size to 0
+  // (kept for any future bulk restock; the inventory table uses − / + per size instead)
   const handleRestock = (product: Product) =>
     runAction(`stock-all:${product.id}`, () => catalogueAdmin.setAllSizes(product, (q) => Math.min(MAX_STOCK, q + 5)), `Added 5 to every size of “${product.name}”.`);
 
@@ -743,10 +807,10 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
   };
 
   return (
-    <div className="min-h-screen bg-canvas text-ink flex flex-col font-sans">
+    <div className="admin-theme min-h-screen bg-canvas text-ink flex flex-col font-sans">
       
       {/* Top Administrative Header */}
-      <header className="bg-surface border-b border-line sticky top-0 z-40">
+      <header className="bg-maroon-950 text-white sticky top-0 z-40 shadow-md">
         <div className="container-page">
           <div className="flex items-center justify-between gap-3 h-16">
 
@@ -760,14 +824,15 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
               />
               {/* Wordmark makes room for the section menu on the narrowest phones */}
               <div className="max-[359px]:sr-only">
-                <span className="font-serif text-lg tracking-[0.18em] text-ink uppercase">
+                <span className="font-serif text-lg tracking-[0.18em] text-white uppercase">
                   ANVAYA
                 </span>
+                <span className="hidden sm:block text-2xs uppercase tracking-[0.2em] text-gold-300 -mt-0.5">Admin</span>
               </div>
             </div>
 
             {/* Navigation Tabs */}
-            <nav className="hidden lg:inline-flex segmented" role="tablist" aria-label="Dashboard sections">
+            <nav className="hidden lg:inline-flex segmented segmented-dark" role="tablist" aria-label="Dashboard sections">
               <button
                 onClick={() => setActiveTab("overview")}
                 role="tab"
@@ -799,7 +864,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                 className="segmented-item"
               >
                 <span>Orders</span>
-                <span className="badge badge-neutral tabular-nums">
+                <span className="tabular-nums opacity-70">
                   {orders.length}
                 </span>
                 {orderAlerts.unseenCount > 0 && (
@@ -817,24 +882,49 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
             </nav>
 
             {/* Right: section menu (narrower screens), Return to Store & Logout */}
-            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={orderAlerts.toggleSound}
+                aria-pressed={orderAlerts.soundOn}
+                aria-label={orderAlerts.soundOn ? "New-order sound on" : "New-order sound off"}
+                title={orderAlerts.soundOn ? "Sound on for new orders" : "Sound off for new orders"}
+                className="btn-icon !text-white/75 hover:!text-white hover:!bg-white/10"
+              >
+                {orderAlerts.soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => void orderAlerts.toggleNotifications()}
+                disabled={orderAlerts.notificationState === "blocked" || orderAlerts.notificationState === "unsupported"}
+                aria-pressed={orderAlerts.notificationState === "on"}
+                aria-label={NOTIFICATION_LABELS[orderAlerts.notificationState]}
+                title={
+                  orderAlerts.notificationState === "blocked"
+                    ? "Notifications are blocked: allow them for this site in the browser's settings"
+                    : `${NOTIFICATION_LABELS[orderAlerts.notificationState]}. New orders are checked every minute while this page is open.`
+                }
+                className="btn-icon !text-white/75 hover:!text-white hover:!bg-white/10 disabled:opacity-40"
+              >
+                {orderAlerts.notificationState === "on" ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
+              </button>
               <button
                 onClick={onReturnToStore}
-                className="btn btn-secondary btn-sm"
+                className="btn btn-sm border border-white/25 !text-white hover:!bg-white/10"
                 title="Open storefront"
               >
                 <Store className="w-3.5 h-3.5" aria-hidden="true" />
                 <span className="max-sm:sr-only">View Store</span>
               </button>
 
-              <span className="hidden xl:inline text-xs text-muted max-w-[14rem] truncate" title={authState.email}>
+              <span className="hidden xl:inline text-xs text-white/60 max-w-[14rem] truncate" title={authState.email}>
                 {authState.email}
               </span>
               <button
                 onClick={handleLogout}
                 disabled={signingOut}
                 aria-busy={signingOut}
-                className="btn btn-ghost btn-sm"
+                className="btn btn-sm !text-white/80 hover:!text-white hover:!bg-white/10"
                 title={`Sign out ${authState.email}`}
               >
                 <LogOut className="w-3.5 h-3.5" />
@@ -857,10 +947,6 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
             orderAlerts.markSeen();
             openSection("orders");
           }}
-          soundOn={orderAlerts.soundOn}
-          onToggleSound={orderAlerts.toggleSound}
-          notificationState={orderAlerts.notificationState}
-          onToggleNotifications={() => void orderAlerts.toggleNotifications()}
         />
 
         {/* Result of the latest product change */}
@@ -882,15 +968,11 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
         {/* ========================================================================= */}
         {activeTab === "overview" && (
           <div className="space-y-8">
-            {/* Welcome banner */}
-            <div className="panel p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            {/* Title and the main action */}
+            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
               <div>
-                <h2 className="heading-card">
-                  Welcome
-                </h2>
-                <p className="text-xs text-neutral-500 mt-1">
-                  Managing ANVAYA ethnic wear boutique collections: Alankritha (Kurtas) and Ayanaa (Sarees).
-                </p>
+                <p className="eyebrow">{new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}</p>
+                <h2 className="font-serif text-3xl text-ink mt-1">Overview</h2>
               </div>
               <div className="flex items-center gap-3">
                 <button
@@ -930,7 +1012,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                   {metrics.inStockCount}
                 </div>
                 <div className="text-xs text-neutral-500 mt-1">
-                  Available for immediate dispatch
+                  Products with stock
                 </div>
               </div>
 
@@ -944,7 +1026,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                   {metrics.outOfStockCount}
                 </div>
                 <div className="text-xs text-neutral-500 mt-1">
-                  Requires inventory restock
+                  Products with no stock
                 </div>
               </div>
 
@@ -964,11 +1046,96 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
 
             </div>
 
+            {/* Needs attention, sales and sizes running out */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+              <div className="panel p-5">
+                <h3 className="heading-label mb-4 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-maroon-600" aria-hidden="true" />
+                  Needs attention
+                </h3>
+                <ul className="space-y-2.5 text-sm">
+                  {[
+                    { label: "New orders to confirm", count: insights.attention.toConfirm, status: "Pending" },
+                    { label: "Confirmed, not yet shipped", count: insights.attention.toShip, status: "Confirmed" },
+                    { label: "Started online, not paid", count: insights.attention.awaitingPayment, status: "Pending" },
+                    { label: "Cancelled and paid: refund due", count: insights.attention.toRefund, status: "Cancelled" },
+                  ].map((row) => (
+                    <li key={row.label}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOrderStatusFilter(row.status);
+                          setActiveTab("orders");
+                        }}
+                        className="w-full flex items-center justify-between gap-3 text-left hover:text-maroon-700 transition-colors cursor-pointer"
+                      >
+                        <span className="text-neutral-700">{row.label}</span>
+                        <span className={`badge tabular-nums ${row.count > 0 ? "badge-warning" : "badge-neutral"}`}>{row.count}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="panel p-5">
+                <h3 className="heading-label mb-4 flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-success" aria-hidden="true" />
+                  Sales
+                </h3>
+                <dl className="grid grid-cols-2 gap-4">
+                  {[
+                    { label: "Last 7 days", figures: insights.sales.week },
+                    { label: "This month", figures: insights.sales.month },
+                  ].map(({ label, figures }) => (
+                    <div key={label} className="panel-muted p-3">
+                      <dt className="text-xs text-neutral-500">{label}</dt>
+                      <dd className="font-serif text-2xl text-ink tabular-nums mt-1">₹{figures.total.toLocaleString("en-IN")}</dd>
+                      <dd className="text-xs text-neutral-500">
+                        {figures.count} order{figures.count === 1 ? "" : "s"}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                <p className="text-2xs text-neutral-400 mt-3">Cancelled, returned and unpaid online orders are left out.</p>
+              </div>
+
+              <div className="panel p-5">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <h3 className="heading-label flex items-center gap-2">
+                    <PackageX className="w-4 h-4 text-danger" aria-hidden="true" />
+                    Low stock
+                  </h3>
+                  <button type="button" onClick={() => setActiveTab("inventory")} className="link text-xs">
+                    Inventory →
+                  </button>
+                </div>
+                {insights.lowStock.length === 0 ? (
+                  <p className="text-sm text-neutral-500">Every published size has 2 or more in stock.</p>
+                ) : (
+                  <ul className="space-y-2 text-xs max-h-48 overflow-y-auto pr-1">
+                    {insights.lowStock.slice(0, 12).map(({ product, size, quantity }) => (
+                      <li key={`${product.id}-${size}`} className="flex items-center justify-between gap-3">
+                        <span className="min-w-0 truncate text-neutral-700">
+                          {product.name} <span className="text-neutral-400">· {size}</span>
+                        </span>
+                        <span className={`badge tabular-nums shrink-0 ${quantity === 0 ? "badge-danger" : "badge-warning"}`}>
+                          {quantity === 0 ? "Sold out" : `${quantity} left`}
+                        </span>
+                      </li>
+                    ))}
+                    {insights.lowStock.length > 12 && (
+                      <li className="text-neutral-400">and {insights.lowStock.length - 12} more</li>
+                    )}
+                  </ul>
+                )}
+              </div>
+            </div>
+
             {/* Two Columns: Recent Orders & Quick Management */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div>
               
               {/* Recent Orders List (2 Cols) */}
-              <div className="lg:col-span-2 panel p-6">
+              <div className="panel p-6">
                 <div className="flex items-center justify-between mb-4 pb-3 border-b border-line">
                   <h3 className="heading-label">
                     Recent Customer Orders
@@ -1006,51 +1173,6 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                 </div>
               </div>
 
-              {/* Collections Summary Card (1 Col) */}
-              <div className="panel p-6 flex flex-col justify-between">
-                <div>
-                  <h3 className="heading-label mb-4 pb-3 border-b border-line">
-                    Collections Breakdown
-                  </h3>
-                  
-                  <div className="space-y-4">
-                    <div className="panel-muted p-4">
-                      <div className="text-xs font-bold text-neutral-900 uppercase">
-                        Alankritha Collection
-                      </div>
-                      <div className="text-xs text-neutral-500 mt-0.5">
-                        Exclusively Women's Kurtas
-                      </div>
-                      <div className="mt-2 text-sm font-semibold text-neutral-800">
-                        {metrics.kurtasCount} active pieces
-                      </div>
-                    </div>
-
-                    <div className="panel-muted p-4">
-                      <div className="text-xs font-bold text-neutral-900 uppercase">
-                        Ayanaa Collection
-                      </div>
-                      <div className="text-xs text-neutral-500 mt-0.5">
-                        Exclusively Women's Sarees
-                      </div>
-                      <div className="mt-2 text-sm font-semibold text-neutral-800">
-                        {metrics.sareesCount} active pieces
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-6 border-t border-line mt-6">
-                  <div className="text-xs text-neutral-500">
-                    <strong>WhatsApp Business:</strong> {BOUTIQUE_CONFIG.supportPhone}
-                  </div>
-                  <div className="text-xs text-neutral-500 mt-1">
-                    <strong>Support email:</strong>{" "}
-                    {BOUTIQUE_CONFIG.supportEmail || "not set yet (add it to supportEmail in src/config.ts)"}
-                  </div>
-                </div>
-              </div>
-
             </div>
           </div>
         )}
@@ -1068,7 +1190,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                   Product Management
                 </h2>
                 <p className="text-xs text-neutral-500 mt-0.5">
-                  View, edit, toggle visibility, and update pricing across Alankritha & Ayanaa collections.
+                  Edit, publish or hide pieces, and duplicate one for a new colour.
                 </p>
               </div>
               <button
@@ -1124,12 +1246,41 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
 
             </div>
 
+            {/* Selected products: publish or hide together */}
+            {selectedProductIds.size > 0 && (
+              <div className="panel p-3 flex flex-wrap items-center gap-2 sticky top-2 z-10 shadow-md" role="region" aria-label="Selected products">
+                <span className="text-sm font-semibold text-ink mr-auto">{selectedProductIds.size} selected</span>
+                <button type="button" onClick={() => void handleBulkStatus("enabled")} className="btn btn-primary btn-sm">
+                  <Eye className="w-3.5 h-3.5" aria-hidden="true" />
+                  Publish
+                </button>
+                <button type="button" onClick={() => void handleBulkStatus("disabled")} className="btn btn-secondary btn-sm">
+                  <EyeOff className="w-3.5 h-3.5" aria-hidden="true" />
+                  Hide
+                </button>
+                <button type="button" onClick={() => setSelectedProductIds(new Set())} className="link text-xs ml-1">
+                  Clear
+                </button>
+              </div>
+            )}
+
             {/* Products Table */}
             <div className="panel overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="ds-table ds-table-stack">
                   <thead>
                     <tr>
+                      <th className="py-3 pl-4 pr-0 w-8">
+                        <input
+                          type="checkbox"
+                          className="checkbox"
+                          aria-label="Select all shown products"
+                          checked={filteredProducts.length > 0 && filteredProducts.every((p) => selectedProductIds.has(p.id))}
+                          onChange={(e) =>
+                            setSelectedProductIds(e.target.checked ? new Set(filteredProducts.map((p) => p.id)) : new Set())
+                          }
+                        />
+                      </th>
                       <th className="py-3 px-4">Product</th>
                       <th className="py-3 px-4">Collection / Type</th>
                       <th className="py-3 px-4">Retail Price</th>
@@ -1144,11 +1295,20 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                       const isPublished = p.status === "enabled";
 
                       return (
-                        <tr key={p.id}>
+                        <tr key={p.id} className={selectedProductIds.has(p.id) ? "bg-gold-300/10" : ""}>
+                          <td data-label="Select" className="py-3 pl-4 pr-0">
+                            <input
+                              type="checkbox"
+                              className="checkbox"
+                              aria-label={`Select ${p.name}`}
+                              checked={selectedProductIds.has(p.id)}
+                              onChange={() => toggleProductSelected(p.id)}
+                            />
+                          </td>
                           {/* Image & Title */}
                           <td data-label="" className="py-3 px-4">
                             <div className="flex items-center space-x-3">
-                              <ProductImage src={getProductImage(p)} alt={p.name} className="w-12 h-16 object-cover shrink-0" compact />
+                              <ProductImage src={getProductImage(p)} alt={p.name} className="w-16 h-[5.33rem] object-cover shrink-0 rounded-xs" compact />
                               <div className="max-w-xs">
                                 <div className="font-semibold text-neutral-900 line-clamp-1">
                                   {p.name}
@@ -1223,6 +1383,14 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                                 <span>Edit</span>
                               </button>
                               <button
+                                onClick={() => handleOpenDuplicateModal(p)}
+                                className="btn-icon"
+                                aria-label={`Duplicate ${p.name}`}
+                                title="Duplicate (for a new colour or a similar piece)"
+                              >
+                                <Copy className="w-4 h-4" aria-hidden="true" />
+                              </button>
+                              <button
                                 onClick={() => setProductToDelete(p)}
                                 className="btn-icon !text-danger hover:!bg-danger-soft"
                                 aria-label={`Delete ${p.name}`}
@@ -1250,10 +1418,10 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
           <div className="space-y-6">
             <div className="panel p-5">
               <h2 className="heading-card">
-                Inventory & Size Stock Management
+                Inventory
               </h2>
               <p className="text-xs text-neutral-500 mt-0.5">
-                Quickly adjust variant quantities, restock batches, or zero-out depleted styles.
+                Use − and + for one piece at a time, or type a number. Red sizes are sold out; amber ones have 1 left.
               </p>
               <div className="mt-4 flex flex-col sm:flex-row gap-2">
               <select
@@ -1329,17 +1497,41 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                           </td>
                           <td data-label="Size Counts (Editable)" className="ds-cell-block py-3 px-4">
                             <div className="flex flex-wrap items-center gap-2">
-                              {getSizeOptions(p).map((size) => (
-                                <div key={size} className="flex items-center space-x-1 panel-muted px-2 py-1">
-                                  <span className="font-bold text-neutral-600 text-2xs">{size}:</span>
-                                  <StockInput
-                                    value={p.sizeStock?.[size] ?? 0}
-                                    label={`Stock for ${describeSize(size)} of ${p.name}`}
-                                    saving={!!pending[`stock:${p.id}:${size}`] || !!pending[`stock-all:${p.id}`]}
-                                    onSave={(value) => handleStockSave(p, size, value)}
-                                  />
-                                </div>
-                              ))}
+                              {getSizeOptions(p).map((size) => {
+                                const qty = p.sizeStock?.[size] ?? 0;
+                                const saving = !!pending[`stock:${p.id}:${size}`] || !!pending[`stock-all:${p.id}`];
+                                // Sold-out sizes show red, the last one amber
+                                const tone = qty === 0 ? "bg-danger-soft border-danger-line" : qty === 1 ? "bg-warning-soft border-warning-line" : "panel-muted";
+                                return (
+                                  <div key={size} className={`flex items-center gap-1 px-1.5 py-1 border rounded-xs ${tone}`}>
+                                    <span className="font-bold text-neutral-600 text-2xs px-0.5">{size}:</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStockSave(p, size, String(qty - 1))}
+                                      disabled={saving || qty <= 0}
+                                      aria-label={`One less ${describeSize(size)} of ${p.name}`}
+                                      className="btn-icon btn-icon-sm !w-6 !h-6"
+                                    >
+                                      <Minus className="w-3 h-3" />
+                                    </button>
+                                    <StockInput
+                                      value={qty}
+                                      label={`Stock for ${describeSize(size)} of ${p.name}`}
+                                      saving={saving}
+                                      onSave={(value) => handleStockSave(p, size, value)}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStockSave(p, size, String(qty + 1))}
+                                      disabled={saving || qty >= MAX_STOCK}
+                                      aria-label={`One more ${describeSize(size)} of ${p.name}`}
+                                      className="btn-icon btn-icon-sm !w-6 !h-6"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </td>
                           <td data-label="Total Stock" className="py-3 px-4">
@@ -1350,20 +1542,12 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                           <td data-label="Quick Restock" className="py-3 px-4 text-right">
                             <div className="flex items-center justify-end space-x-2">
                               <button
-                                onClick={() => handleRestock(p)}
-                                disabled={!!pending[`stock-all:${p.id}`]}
-                                title="Add 5 to every size"
-                                className="btn btn-secondary btn-sm"
-                              >
-                                +5 All
-                              </button>
-                              <button
                                 onClick={() => handleMarkOut(p)}
                                 disabled={!!pending[`stock-all:${p.id}`]}
                                 title="Set every size to 0"
                                 className="btn btn-danger-soft btn-sm"
                               >
-                                Mark Out
+                                Mark sold out
                               </button>
                             </div>
                           </td>
@@ -1381,7 +1565,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
         {/* ========================================================================= */}
         {/* TAB 5: COUPONS */}
         {/* ========================================================================= */}
-        {activeTab === "coupons" && <AdminCoupons />}
+        {activeTab === "coupons" && <AdminCoupons usage={ordersLoad.status === "ready" ? insights.couponUsage : undefined} />}
 
         {/* ========================================================================= */}
         {/* TAB 4: ORDERS MANAGEMENT */}
@@ -1398,29 +1582,27 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
             <div className="panel p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="heading-card">
-                  Customer Orders & Fulfillment
+                  Orders
                 </h2>
                 <p className="text-xs text-neutral-500 mt-0.5">
-                  Review orders, check delivery addresses, and update fulfillment states.
+                  Contact customers and move orders from confirmed to delivered.
                 </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                {/* Status Filter */}
-                <select
-                  value={orderStatusFilter}
-                  onChange={(e) => setOrderStatusFilter(e.target.value)}
-                  className="field field-sm w-auto"
-                  aria-label="Filter orders by status"
-                >
-                  <option value="All">All Order Statuses</option>
-                  <option value="Pending">Pending</option>
-                  <option value="Confirmed">Confirmed</option>
-                  <option value="Shipped">Shipped</option>
-                  <option value="Delivered">Delivered</option>
-                  <option value="Cancelled">Cancelled</option>
-                  <option value="Returned">Returned</option>
-                </select>
+                {/* Search by name, phone, order number or place */}
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" aria-hidden="true" />
+                  <input
+                    type="search"
+                    value={orderSearch}
+                    onChange={(e) => setOrderSearch(e.target.value)}
+                    placeholder="Name, phone or ANV-…"
+                    aria-label="Search orders"
+                    className="field field-sm field-touch pl-9"
+                    id="admin-order-search"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() => void loadOrders()}
@@ -1433,10 +1615,31 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
               </div>
             </div>
 
+            {/* Status chips with counts */}
+            <div className="-mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto">
+              <div className="flex gap-2 w-max sm:w-auto sm:flex-wrap" role="group" aria-label="Filter orders by status">
+                {(["All", ...ORDER_STATUSES] as const).map((status) => {
+                  const count = status === "All" ? orders.length : insights.statusCounts[status];
+                  return (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={() => setOrderStatusFilter(status)}
+                      aria-pressed={orderStatusFilter === status}
+                      className="chip whitespace-nowrap"
+                    >
+                      {status === "All" ? "All orders" : status}
+                      <span className="tabular-nums opacity-70">{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="panel overflow-hidden">
               <OrdersLoadNote load={ordersLoad} empty={orders.length === 0} onRetry={loadOrders} className="p-6" />
               {ordersLoad.status === "ready" && orders.length > 0 && filteredOrders.length === 0 && (
-                <p className="p-6 text-center text-xs text-muted">No orders match this filter.</p>
+                <p className="p-6 text-center text-xs text-muted">No orders match this {orderSearch.trim() ? "search" : "filter"}.</p>
               )}
               {filteredOrders.length > 0 && (
               <div className="overflow-x-auto">
@@ -1473,19 +1676,24 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                         </td>
                         <td data-label="Total" className="py-3 px-4 font-semibold text-neutral-900 tabular-nums">
                           ₹{o.total.toLocaleString("en-IN")}
-                          <div className="text-neutral-500 text-xs font-normal">{o.paymentStatus}</div>
+                          <div className="mt-1">
+                            <span className={`badge badge-${orderPaymentLabel(o).tone}`}>{orderPaymentLabel(o).label}</span>
+                          </div>
                         </td>
                         <td data-label="Status" className="py-3 px-4">
                           <OrderStatusControl order={o} busy={orderBusy === o.id} disabled={orderBusy !== null} onChange={(status) => void handleChangeOrder(o, { status })} />
                         </td>
                         <td data-label="Details" className="py-3 px-4 text-right">
-                          <button
-                            onClick={() => setSelectedOrderId(o.id)}
-                            className="btn btn-secondary btn-sm"
-                            aria-label={`View order ${o.reference}`}
-                          >
-                            View
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <CustomerContactButtons order={o} />
+                            <button
+                              onClick={() => setSelectedOrderId(o.id)}
+                              className="btn btn-secondary btn-sm"
+                              aria-label={`View order ${o.reference}`}
+                            >
+                              View
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1514,7 +1722,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
       {/* ========================================================================= */}
       {isProductModalOpen && (
         // Full screen on phones; a centred panel from 640px
-        <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center sm:p-4 bg-ink/50 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center sm:p-4 bg-ink/45">
           <div className="dialog-panel bg-surface max-w-2xl w-full h-full sm:h-auto sm:max-h-[90vh] flex flex-col overflow-hidden rounded-none sm:rounded-xs">
 
             {/* Modal Header */}
@@ -1841,7 +2049,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
       {/* MODAL: DELETE CONFIRMATION */}
       {/* ========================================================================= */}
       {productToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/50 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/45">
           <div className="dialog-panel bg-surface max-w-sm w-full p-6 text-center">
             <div className="w-12 h-12 rounded-full bg-danger-soft text-danger flex items-center justify-center mx-auto mb-3">
               <Trash2 className="w-6 h-6" />
@@ -1886,7 +2094,7 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
       {/* MODAL: ORDER DETAILS */}
       {/* ========================================================================= */}
       {selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/50 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/45">
           <div className="dialog-panel bg-surface max-w-lg w-full max-h-[85vh] flex flex-col overflow-hidden">
             <div className="px-6 py-4 border-b border-line flex items-center justify-between">
               <div>
@@ -1915,6 +2123,9 @@ export default function AdminDashboard({ onReturnToStore, onProductsChanged }: A
                 </div>
                 <div className="text-neutral-500 mt-1">
                   {selectedOrder.address}, {selectedOrder.city}, {selectedOrder.state} - {selectedOrder.pincode}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <CustomerContactButtons order={selectedOrder} labelled />
                 </div>
               </div>
 
@@ -2034,10 +2245,17 @@ function OrdersLoadNote({
 }) {
   if (load.status === "loading" && empty) {
     return (
-      <p className={`flex items-center justify-center gap-2 text-xs text-muted ${className}`} role="status">
-        <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
-        Loading orders…
-      </p>
+      // Shimmering placeholder rows while the first load is on its way
+      <div className={`space-y-3 ${className}`} role="status" aria-label="Loading orders">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex items-center gap-4">
+            <span className="photo-loading h-9 w-28 rounded-xs" />
+            <span className="photo-loading h-4 flex-1 rounded-xs" />
+            <span className="photo-loading h-4 w-16 rounded-xs" />
+          </div>
+        ))}
+        <span className="sr-only">Loading orders…</span>
+      </div>
     );
   }
   if (load.status === "error") {
@@ -2259,59 +2477,25 @@ function StockInput({
 
 // New orders since the admin last looked, plus the optional sound and browser
 // notification switches. Orders are re-read every minute while this page is open.
-function OrderAlertBar({
-  unseenCount,
-  onViewOrders,
-  soundOn,
-  onToggleSound,
-  notificationState,
-  onToggleNotifications,
-}: {
-  unseenCount: number;
-  onViewOrders: () => void;
-  soundOn: boolean;
-  onToggleSound: () => void;
-  notificationState: NotificationState;
-  onToggleNotifications: () => void;
-}) {
-  const notificationLabel = {
-    on: "Notifications on",
-    off: "Turn on notifications",
-    blocked: "Notifications blocked",
-    unsupported: "No notifications on this device",
-  }[notificationState];
+const NOTIFICATION_LABELS: Record<NotificationState, string> = {
+  on: "Notifications on",
+  off: "Turn on notifications",
+  blocked: "Notifications blocked",
+  unsupported: "No notifications on this device",
+};
 
+/** "N new orders" banner (sound and notification switches are in the header) */
+function OrderAlertBar({ unseenCount, onViewOrders }: { unseenCount: number; onViewOrders: () => void }) {
+  if (unseenCount === 0) return null;
   return (
-    <div className="mb-6 space-y-2" id="order-alerts">
-      {unseenCount > 0 && (
-        <div className="status-note status-note-warning" role="status">
-          <Bell className="w-4 h-4 shrink-0" aria-hidden="true" />
-          <span className="flex-1 font-semibold">
-            {unseenCount} new order{unseenCount === 1 ? "" : "s"} since you last checked
-          </span>
-          <button type="button" onClick={onViewOrders} className="btn btn-primary btn-sm">
-            View orders
-          </button>
-        </div>
-      )}
-      <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-4 gap-y-1 text-xs text-muted">
-        <span className="w-full sm:w-auto">New orders are checked every minute while this page is open.</span>
-        <button type="button" onClick={onToggleSound} aria-pressed={soundOn} className="btn btn-ghost btn-sm">
-          {soundOn ? <Volume2 className="w-3.5 h-3.5" aria-hidden="true" /> : <VolumeX className="w-3.5 h-3.5" aria-hidden="true" />}
-          {soundOn ? "Sound on" : "Sound off"}
-        </button>
-        <button
-          type="button"
-          onClick={onToggleNotifications}
-          disabled={notificationState === "blocked" || notificationState === "unsupported"}
-          aria-pressed={notificationState === "on"}
-          title={notificationState === "blocked" ? "Allow notifications for this site in the browser's settings" : undefined}
-          className="btn btn-ghost btn-sm"
-        >
-          {notificationState === "on" ? <Bell className="w-3.5 h-3.5" aria-hidden="true" /> : <BellOff className="w-3.5 h-3.5" aria-hidden="true" />}
-          {notificationLabel}
-        </button>
-      </div>
+    <div className="mb-6 status-note status-note-warning" role="status" id="order-alerts">
+      <Bell className="w-4 h-4 shrink-0" aria-hidden="true" />
+      <span className="flex-1 font-semibold">
+        {unseenCount} new order{unseenCount === 1 ? "" : "s"} since you last checked
+      </span>
+      <button type="button" onClick={onViewOrders} className="btn btn-primary btn-sm">
+        View orders
+      </button>
     </div>
   );
 }
@@ -2548,5 +2732,42 @@ function ProductPhotos({
         </div>
       </div>
     </div>
+  );
+}
+
+/** WhatsApp and call buttons for an order's customer (labelled in the order window) */
+function CustomerContactButtons({ order, labelled = false }: { order: Order; labelled?: boolean }) {
+  const whatsapp = customerWhatsAppUrl(order, BOUTIQUE_CONFIG.brandName);
+  const phone = customerPhoneHref(order);
+  if (labelled) {
+    return (
+      <>
+        <a href={whatsapp} target="_blank" rel="noopener noreferrer" className="btn btn-whatsapp btn-sm">
+          <MessageSquare className="w-3.5 h-3.5" aria-hidden="true" />
+          WhatsApp
+        </a>
+        <a href={phone} className="btn btn-secondary btn-sm">
+          <Phone className="w-3.5 h-3.5" aria-hidden="true" />
+          Call
+        </a>
+      </>
+    );
+  }
+  return (
+    <>
+      <a
+        href={whatsapp}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="btn-icon btn-icon-sm text-[#128C7E]"
+        aria-label={`WhatsApp ${order.customerName} about ${order.reference}`}
+        title="WhatsApp the customer"
+      >
+        <MessageSquare className="w-4 h-4" />
+      </a>
+      <a href={phone} className="btn-icon btn-icon-sm" aria-label={`Call ${order.customerName}`} title="Call the customer">
+        <Phone className="w-4 h-4" />
+      </a>
+    </>
   );
 }

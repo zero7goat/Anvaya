@@ -63,4 +63,10 @@ export const OVERLAY_MOTION = {
     animate: { x: 0, transition: MOTION_TRANSITION.panel },
     exit: { x: "-100%", pointerEvents: "none", transition: { ...EXIT_TRANSITION, duration: 0.4 } },
   },
+  // Phone bottom sheets: rise from the bottom edge
+  sheetUp: {
+    initial: { y: "100%" },
+    animate: { y: 0, transition: MOTION_TRANSITION.panel },
+    exit: { y: "100%", pointerEvents: "none", transition: { ...EXIT_TRANSITION, duration: 0.4 } },
+  },
 } as const;

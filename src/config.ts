@@ -73,11 +73,11 @@ export const BOUTIQUE_CONFIG = {
       enabled: false,
     },
   ],
-  // Online payment (Razorpay: UPI, cards, net banking) through supabase/functions. Turn on
-  // only after supabase/drafts/payments_razorpay.sql is applied and the functions are
-  // deployed with their keys; until then the bag keeps ordering on WhatsApp.
+  // Online payment (Razorpay: UPI, cards, net banking) through supabase/functions. The keys
+  // live in the Edge Functions' secrets: rzp_test_ keys take test payments only, so switch
+  // them to rzp_live_ keys (and the live webhook) on launch day. Off = WhatsApp ordering only.
   onlinePayment: {
-    enabled: false,
+    enabled: true,
   },
   // Hosting: static site on Cloudflare Pages; products, stock and orders live in Supabase.
 };

@@ -1,5 +1,6 @@
 import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Banknote, Check, ChevronRight, MapPin, MessageSquare, Minus, Plus, Star, Truck } from "lucide-react";
+import { AlertCircle, Banknote, Check, ChevronRight, MapPin, MessageSquare, Minus, Plus, Star, Truck, Share2, PackageCheck } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { CollectionType, Product } from "../types";
 import { BOUTIQUE_CONFIG } from "../config";
 import { productService } from "../services/productService";
@@ -24,6 +25,8 @@ import ProductInfoSections from "./ProductInfoSections";
 import NotFoundPage from "./NotFoundPage";
 import SizePrompt, { focusFirstSize } from "./SizePrompt";
 import { BackgroundMotif } from "./decor/Motifs";
+import Reveal from "./Reveal";
+import { OVERLAY_MOTION } from "../utils/motion";
 import { colourOptions } from "../utils/productDetails";
 import { getProductImage } from "../data/imageRegistry";
 
@@ -65,7 +68,7 @@ export default function ProductPage({
   }, [product?.name]);
 
   if (!product) {
-    return <ProductNotFound onNavigateHome={onNavigateHome} onNavigateCollection={onNavigateCollection} />;
+    return <ProductNotFound onNavigateHome={onNavigateHome} onNavigateCollection={onNavigateCollection} onOpenProduct={onOpenProduct} />;
   }
 
   // Keyed by product so size, quantity and gallery state reset when moving to a similar product
@@ -174,36 +177,36 @@ function ProductDetails({
 
   const whatsappLink = orderService.generateWhatsAppProductEnquiryUrl(product.name, selectedSize || undefined);
 
+  // Share this piece: the device's share sheet where there is one, else a WhatsApp message
+  const sharePiece = async () => {
+    const url = window.location.href;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: product.name, url });
+      } catch {
+        // Closed without sharing
+      }
+      return;
+    }
+    window.open(`https://wa.me/?text=${encodeURIComponent(`${product.name}: ${url}`)}`, "_blank", "noopener,noreferrer");
+  };
+
+  // Phones: once the buy buttons are off screen, a bar with the price and buttons stays at the bottom
+  const buyBlockRef = useRef<HTMLDivElement>(null);
+  const [buyBlockVisible, setBuyBlockVisible] = useState(true);
+  useEffect(() => {
+    const el = buyBlockRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([entry]) => setBuyBlockVisible(entry.isIntersecting));
+    io.observe(el);
+    return () => io.disconnect();
+  }, [isOutOfStock]);
+  const showBuyBar = isMobile && !isOutOfStock && !buyBlockVisible;
+
   return (
     <div className="relative isolate overflow-hidden bg-canvas text-ink pb-24" id="product-page">
       <BackgroundMotif kind="sprig" className="left-0 bottom-16 md:bottom-24 w-20 h-52 md:w-32 md:h-80" />
       <BackgroundMotif kind="mandala" className="-right-16 md:-right-24 bottom-[28rem] md:bottom-40 w-40 h-40 md:w-64 md:h-64" />
-      {/* Breadcrumb: Home → Collection → Product */}
-      <nav aria-label="Breadcrumb" className="hidden md:block bg-surface border-b border-line py-3">
-        <ol className="container-page breadcrumb">
-          <li>
-            <button onClick={onNavigateHome}>
-              Home
-            </button>
-          </li>
-          <li className="flex items-center gap-1.5">
-            <ChevronRight className="w-3 h-3 shrink-0" aria-hidden="true" />
-            <button
-              onClick={() => onNavigateCollection(collectionKey)}
-             
-            >
-              {collection.name}
-            </button>
-          </li>
-          <li className="flex items-center gap-1.5 min-w-0">
-            <ChevronRight className="w-3 h-3 shrink-0" aria-hidden="true" />
-            <span className="truncate text-ink font-medium" aria-current="page">
-              {product.name}
-            </span>
-          </li>
-        </ol>
-      </nav>
-
       {isMobile && (
         <MobileProductGallery
           images={images}
@@ -299,6 +302,10 @@ function ProductDetails({
               )}
 
               <div className="flex items-baseline gap-2 pt-1">
+                <button type="button" onClick={sharePiece} className="order-last ml-auto link text-xs inline-flex items-center gap-1.5 self-center">
+                  <Share2 className="w-3.5 h-3.5" aria-hidden="true" />
+                  Share
+                </button>
                 <span className="price text-xl">
                   {formatINR(getEffectivePrice(product))}
                 </span>
@@ -393,7 +400,7 @@ function ProductDetails({
 
             {/* Quantity + Add to Cart */}
             {!isOutOfStock && (
-              <div className="space-y-3">
+              <div className="space-y-3" ref={buyBlockRef}>
                 <div className="flex items-stretch gap-3">
                   <div className="flex items-center border border-line-strong rounded-xs bg-surface shrink-0" role="group" aria-label="Quantity">
                     <button
@@ -452,6 +459,15 @@ function ProductDetails({
                     Ask a Question
                   </a>
                 </div>
+
+                {/* Delivery times, as the Shipping & Returns policy states them */}
+                <p className="flex items-start gap-2 text-xs text-ink-soft leading-relaxed">
+                  <PackageCheck className="w-4 h-4 shrink-0 text-maroon-600 mt-px" strokeWidth={1.6} aria-hidden="true" />
+                  <span>
+                    Usually dispatched within 3 to 5 working days of confirmation, then delivered in 3 to 7 working days.
+                    Free shipping across India.
+                  </span>
+                </p>
               </div>
             )}
 
@@ -469,6 +485,7 @@ function ProductDetails({
         </div>
 
         {/* Similar products from the same collection */}
+        <Reveal>
         <section aria-labelledby="similar-products-heading" className="mt-16 sm:mt-20 pt-10 border-t border-line">
           <div className="flex items-baseline justify-between gap-4 mb-6">
             <h2 id="similar-products-heading" className="heading-card">
@@ -498,6 +515,7 @@ function ProductDetails({
             </div>
           )}
         </section>
+        </Reveal>
 
         {/* Pieces this shopper opened before (not the current one) */}
         <RecentlyViewed
@@ -509,9 +527,37 @@ function ProductDetails({
 
         {/* Write a Review, then Customer Reviews, at the end of the page */}
         <ProductReviews product={product}>
-          <BackgroundMotif kind="paisley" className="right-2 md:right-auto md:left-[30%] top-4 md:top-16 w-14 h-24 md:w-24 md:h-40 -rotate-[25deg]" />
         </ProductReviews>
       </div>
+
+      {/* Phone buy bar: price, chosen size and the two buy buttons, while the main ones are off screen */}
+      <AnimatePresence>
+        {showBuyBar && (
+          <motion.div
+            {...OVERLAY_MOTION.sheetUp}
+            className="fixed inset-x-0 bottom-0 z-30 bg-surface/95 backdrop-blur-md border-t border-line shadow-[0_-6px_20px_rgba(0,0,0,0.08)] px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden"
+            role="region"
+            aria-label="Buy this piece"
+          >
+            <div className="flex items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-base font-bold tabular-nums text-ink">{formatINR(getEffectivePrice(product))}</p>
+                <p className="text-2xs text-muted truncate">{selectedSize ? `Size ${selectedSize}` : "Choose a size"}</p>
+              </div>
+              <button type="button" onClick={handleBuyNow} className="btn btn-whatsapp shrink-0 px-3" aria-label="Order on WhatsApp">
+                <MessageSquare className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={handleAddToCart}
+                className={`btn shrink-0 ${addedSuccess ? "btn-success" : "btn-primary"}`}
+              >
+                {addedSuccess ? "Added" : selectedSize ? "Add to Cart" : "Select Size"}
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -534,7 +580,8 @@ function StockNote({ tone, children }: { tone: "success" | "warning" | "danger";
 function ProductNotFound({
   onNavigateHome,
   onNavigateCollection,
-}: Pick<ProductPageProps, "onNavigateHome" | "onNavigateCollection">) {
+  onOpenProduct,
+}: Pick<ProductPageProps, "onNavigateHome" | "onNavigateCollection" | "onOpenProduct">) {
   return (
     <NotFoundPage
       id="product-not-found"
@@ -543,6 +590,7 @@ function ProductNotFound({
       message="It may have been removed or the link may be incorrect. Explore our collections to find something you love."
       onNavigateHome={onNavigateHome}
       onNavigateCollection={onNavigateCollection}
+      onOpenProduct={onOpenProduct}
     />
   );
 }

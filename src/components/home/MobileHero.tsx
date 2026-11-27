@@ -183,18 +183,21 @@ export default function MobileHero({
                 aria-hidden={i !== current}
               >
                 {loaded.has(i) && (
-                  <img
-                    src={src}
-                    srcSet={srcSet}
-                    sizes={srcSet ? "100vw" : undefined}
-                    alt={slide.alt}
-                    referrerPolicy="no-referrer"
-                    fetchPriority={i === 0 ? "high" : "auto"}
-                    decoding="async"
-                    draggable={false}
-                    style={{ objectPosition: slide.position }}
-                    className="w-full h-full object-cover pointer-events-none"
-                  />
+                  // The shown slide drifts slowly closer (the wrapper moves; the image never scales)
+                  <div key={i === current ? `on-${current}` : "off"} className={`w-full h-full ${i === current ? "hero-drift" : ""}`}>
+                    <img
+                      src={src}
+                      srcSet={srcSet}
+                      sizes={srcSet ? "100vw" : undefined}
+                      alt={slide.alt}
+                      referrerPolicy="no-referrer"
+                      fetchPriority={i === 0 ? "high" : "auto"}
+                      decoding="async"
+                      draggable={false}
+                      style={{ objectPosition: slide.position }}
+                      className="w-full h-full object-cover pointer-events-none"
+                    />
+                  </div>
                 )}
               </div>
             );
@@ -235,7 +238,8 @@ function OffersStrip() {
   const cod = BOUTIQUE_CONFIG.paymentMethods.some((m) => m.id === "cod" && m.enabled);
   const items = [
     <>Free shipping</>,
-    ...(cod ? [<>Cash on Delivery available</>] : [<>Order on WhatsApp</>]),
+    ...(cod ? [<>Cash on Delivery available</>] : []),
+    ...(BOUTIQUE_CONFIG.onlinePayment.enabled ? [<>Secure online payment</>] : [<>Order on WhatsApp</>]),
     <>Delivering across India</>,
   ];
   // Two identical copies scroll as one loop

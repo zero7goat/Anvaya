@@ -26,6 +26,9 @@ export interface HeroSlide {
   position: string;
   image: string;
   alt: string;
+  // Optional text over a plain photo (leave out for artwork that has its own printed text);
+  // it rises in each time the slide is shown
+  caption?: { eyebrow?: string; title: string; text?: string };
 }
 
 /**

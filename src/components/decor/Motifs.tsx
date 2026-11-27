@@ -128,29 +128,7 @@ export function Mandala({ className = "" }: { className?: string }) {
   );
 }
 
-/** Paisley (mango) motif with an inner outline, a small flower and dotted edge. */
-export function Paisley({ className = "" }: { className?: string }) {
-  const outer = "M60 190 C10 190 0 130 20 95 C40 60 95 55 105 20 C120 45 125 75 115 110 C102 160 90 190 60 190Z";
-  const inner = "M60 172 C25 172 20 130 34 104 C48 80 84 74 98 52 C104 74 104 94 98 116 C88 150 80 172 60 172Z";
-  return (
-    <svg viewBox="0 0 130 200" className={className} fill="currentColor" aria-hidden="true">
-      <path d={outer} />
-      <path d={inner} className="fill-canvas" />
-      <path d={inner} fill="none" stroke="currentColor" strokeWidth="2" transform="translate(6 6) scale(0.86)" />
-      <g transform="translate(58 132)">
-        {Array.from({ length: 6 }, (_, i) => (
-          <path key={i} d={petalPath(16, 6)} transform={`rotate(${i * 60})`} />
-        ))}
-        <circle r="4" className="fill-canvas" />
-      </g>
-      {[[40, 112], [80, 96], [86, 150], [34, 150]].map(([cx, cy]) => (
-        <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="3" />
-      ))}
-    </svg>
-  );
-}
-
-const MOTIFS = { mandala: Mandala, paisley: Paisley, sprig: FloralSprig };
+const MOTIFS = { mandala: Mandala, sprig: FloralSprig };
 
 /**
  * A faint decorative motif positioned in a section's empty space. The parent must be

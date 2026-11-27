@@ -25,6 +25,8 @@ export { COLLECTION_STYLES };
 export default function Footer({ onSelectCategory, onNavigateCollection, onNavigateCollectionStyle, onNavigatePolicy }: FooterProps) {
   const { collections } = BOUTIQUE_CONFIG;
   const whatsappUrl = `https://wa.me/${BOUTIQUE_CONFIG.whatsappNumber}`;
+  // How orders are placed today: online payment once it is switched on, else WhatsApp
+  const orderingNote = BOUTIQUE_CONFIG.onlinePayment.enabled ? "Secure online payment" : "Order by WhatsApp enquiry";
   const phoneHref = `tel:${BOUTIQUE_CONFIG.supportPhone.replace(/\s+/g, "")}`;
 
   const handleCollectionClick = (col: CollectionType) => {
@@ -54,6 +56,23 @@ export default function Footer({ onSelectCategory, onNavigateCollection, onNavig
   return (
     <footer className="text-canvas font-sans bg-maroon-800" id="anvaya-footer">
       <div className="container-page pt-12 sm:pt-14 pb-6">
+        {/* Brand band: emblem, name, tagline and a direct line to the boutique */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-10 mb-10 border-b border-white/15">
+          <div className="flex items-center gap-4">
+            <img src="/images/logo-144.png" width={159} height={144} alt="" className="h-12 w-auto object-contain" loading="lazy" decoding="async" />
+            <div>
+              <p className="font-serif text-xl tracking-[0.22em] uppercase text-white">{BOUTIQUE_CONFIG.brandName}</p>
+              <p className="text-xs text-white/65 mt-0.5">
+                {BOUTIQUE_CONFIG.brandTagline} · {BOUTIQUE_CONFIG.storeLocation}
+              </p>
+            </div>
+          </div>
+          <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="btn btn-whatsapp self-start md:self-auto">
+            <MessageSquare className="w-4 h-4" aria-hidden="true" />
+            Chat with us on WhatsApp
+          </a>
+        </div>
+
         {/* Link columns */}
         <div
           className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10 sm:gap-x-10"
@@ -114,7 +133,7 @@ export default function Footer({ onSelectCategory, onNavigateCollection, onNavig
           {/* The shop's actual ordering rules, then its policy pages */}
           <FooterColumn title="Delivery & Policies" id="footer-col-policies">
             <li className="text-white/80">Free shipping</li>
-            <li className="text-white/80">Orders on WhatsApp</li>
+            <li className="text-white/80">{BOUTIQUE_CONFIG.onlinePayment.enabled ? "Pay online: UPI, cards, net banking" : "Orders on WhatsApp"}</li>
             <li className="text-white/80">All India Delivery</li>
             {POLICY_LINKS.map(({ view, label }) => (
               <li key={view}>
@@ -157,7 +176,7 @@ export default function Footer({ onSelectCategory, onNavigateCollection, onNavig
 
           <div className="flex flex-wrap items-center gap-2.5 md:justify-center text-sm">
             <MessageSquare className="w-4 h-4 text-gold-300" aria-hidden="true" />
-            <span className="text-white/90">Order by WhatsApp enquiry</span>
+            <span className="text-white/90">{orderingNote}</span>
           </div>
 
           <div className="flex items-center gap-2 md:justify-end text-sm text-white/90">
